@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: shopsphere
+  datasource:
+    url: jdbc:postgresql://localhost:5432/shopsphere
+    username: shopsphere
+    password: shopsphere
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: catalog
+  flyway:
+    enabled: true
+    default-schema: catalog
+    schemas: catalog
+    create-schemas: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+server:
+  port: 8080
