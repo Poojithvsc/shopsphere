@@ -1,41 +1,123 @@
 ---
 project: shopsphere
 type: context
-status: placeholder
+status: populated
 updated: 2026-05-16
-source-of-truth: D:\obsidian-vaults\engineering-journal\projects\shopsphere\CONTEXT.md
 ---
 
-# ShopSphere — CONTEXT (mirror)
+# ShopSphere — CONTEXT
 
-> **Mirror of the vault CONTEXT.md.** Source of truth lives at
-> `D:\obsidian-vaults\engineering-journal\projects\shopsphere\CONTEXT.md`.
-> Update both on every change. CI will eventually diff them.
+> Source of truth for naming and concepts. Names here must match names in Java packages, classes, and database tables. When code and CONTEXT disagree, one of them is wrong — fix it.
+>
+> Mirrored to `D:\code\shopsphere\docs\CONTEXT.md` on every change.
 
-## Status
+## Guiding texts
 
-Placeholder. Populated by `to-prd` + `grill-with-docs` after Phase 0.
-
-## Guiding principles
+Every design decision is judged against these. ADRs must cite at least one.
 
 | Source | We pull from it |
 |---|---|
-| **Patterns of Enterprise Application Architecture** (Fowler) | Repository, Unit of Work, Service Layer, DTO, Domain Model, Data Mapper, Identity Map |
-| **A Philosophy of Software Design** (Ousterhout) | Deep modules, information hiding, complexity = dependencies + obscurity |
-| **Domain-Driven Design** (Evans) | Ubiquitous language, bounded contexts, aggregates, domain events |
-| **Extreme Programming Explained** (Beck) | TDD, red-green-refactor, small releases, CI, YAGNI |
-| **The Pragmatic Programmer** (Hunt/Thomas) | DRY, orthogonality, tracer bullets, broken windows |
+| **Patterns of Enterprise Application Architecture** (Fowler) | Repository, Unit of Work, Service Layer, DTO, Domain Model, Data Mapper, Money pattern |
+| **A Philosophy of Software Design** (Ousterhout) | Deep modules, information hiding, strategic vs tactical programming |
+| **Domain-Driven Design** (Evans) | Ubiquitous language, bounded contexts, aggregates, value objects, domain events |
+| **Extreme Programming Explained** (Beck) | TDD, red-green-refactor, small releases, YAGNI |
+| **The Pragmatic Programmer** (Hunt/Thomas) | DRY, orthogonality, tracer bullets, reversibility |
 
-Every ADR must cite at least one source.
+## Language
 
-## Ubiquitous Language
+**Customer**:
+A person who places **Orders**, owns a **Cart**, and provides a shipping address at checkout.
+_Avoid_: shopper, buyer, client, account.
 
-_TBD — populated during `grill-with-docs`._
+**User**:
+The authentication identity (email + password + tokens) belonging to a **Customer**. Lives strictly inside the `identity` module. 1:1 with **Customer** in MVP, but conceptually distinct: identity ≠ domain actor. **Identity owns both `User` and `Customer`** — they are materialized together at registration in a single transaction.
+_Avoid_: account, login, principal.
+
+**Cart**:
+The mutable collection of **Line Items** a **Customer** is currently considering. Exactly one **Cart** per **Customer**, for life. Cleared on successful checkout; not restored on failed payment.
+_Avoid_: basket, bag, wishlist.
+
+**Order**:
+An immutable snapshot of a **Cart** at checkout time, plus a shipping address and a payment status. Owns its own copies of name + unit price + qty per **Line Item** so price changes in **Catalog** never alter history.
+_Avoid_: purchase, transaction, receipt.
+
+**Line Item**:
+One row of a **Cart** or **Order**: a **Product** reference + qty (+ snapshotted name + unit price when inside an **Order**).
+_Avoid_: cart item, order item, basket entry.
+
+**Product**:
+A sellable item in the **Catalog**. Has a name, description, unit price (**Money**, INR), and `availableQty`. Seeded via Flyway; no admin CRUD in MVP.
+_Avoid_: SKU (until variants exist), item, listing.
+
+**Stock Reservation**:
+A first-class aggregate representing inventory held against a specific **Order**. Fields: `reservationId`, `orderId`, `productId`, `qty`, `status` (`HELD`, `CONFIRMED`, `RELEASED`). Created at checkout, **confirmed** on payment success (qty leaves the system), **released** on payment failure (qty returns to `availableQty`).
+_Avoid_: hold, lock, allocation, reserved_qty column.
+
+**Money**:
+A value object: `amount: BigDecimal` + `currency: Currency`. Arithmetic across mismatched currencies is forbidden by construction. MVP uses INR exclusively.
+_Avoid_: price, amount, decimal.
+
+**Order Status**:
+The state of an **Order**. MVP states: `PENDING_PAYMENT` (created, awaiting payment outcome), `PAID` (terminal success), `CANCELLED` (terminal failure, only reachable from `PENDING_PAYMENT`). `FULFILLED` is deliberately absent — it will reappear when real warehouse + shipping exist.
+_Avoid_: state, phase, stage.
+
+**Payment Outcome**:
+The result of running a card through the **Payment Simulator**. Exactly one of: `SUCCEEDED`, `DECLINED`, `INSUFFICIENT_FUNDS`. The latter two both cancel the **Order**; they exist as distinct outcomes because the payment article distinguishes them and the test card numbers do too.
+_Avoid_: PaymentResult, PaymentStatus (collides with Order Status), failure.
+
+## Relationships
+
+- A **Customer** has exactly one **User** (MVP), owns exactly one **Cart**, and may own zero or more **Orders**.
+- A **Cart** contains zero or more **Line Items**.
+- A **Cart** is *snapshotted into* a new **Order** on successful checkout; the **Cart** is then cleared.
+- An **Order** contains one or more **Line Items**, immutable after creation.
+- A failed payment cancels the **Order** but does not restore the **Cart**.
+
+## Example dialogue
+
+> **Dev:** "When a **Customer** places an **Order**, do we copy their email onto it?"
+> **Domain expert:** "No — the **Order** references the **Customer**'s id. The **User**'s email is an identity concern, not an order concern."
+
+## Flagged ambiguities
+
+- "shopper", "user", and "customer" were used interchangeably in the PRD — resolved 2026-05-16: **Customer** is the domain actor, **User** is the identity row. "Shopper" is retired.
+
+---
 
 ## Bounded contexts
 
-_TBD._ Likely from MVP: **Catalog**, **Identity**, **Ordering**, **Payment** (simulated).
+| Context | Responsibility | Aggregates |
+|---|---|---|
+| **Catalog** | Owns the inventory truth. Lists **Products**, runs **Stock Reservations**. | `Product`, `StockReservation` |
+| **Identity** | Owns authentication. Issues access + refresh tokens, hashes passwords. | `User`, `RefreshToken` |
+| **Ordering** | Owns the **Cart** and the **Order** lifecycle. Bridges the **Customer** to **Payment** + **Catalog**. | `Cart`, `Order` |
+| **Payment** | Owns the simulated card-processing rules. | (no aggregate — stateless `PaymentSimulator` + outbox listener) |
 
-## ADRs
+Cross-schema joins are forbidden. Contexts reference each other only by id (`CustomerId`, `OrderId`, `ProductId`) and by published events.
 
-See `docs/adr/`.
+## Domain events
+
+Each context publishes events about *its own* concepts only.
+
+**Emitted by Ordering** (topic `ordering.events`):
+- `OrderPlaced` — a new **Order** entered `PENDING_PAYMENT`. Payload: `orderId`, `customerId`, `lineItems`, `total`, `occurredAt`. Consumed by: **Payment**.
+- `OrderPaid` — an **Order** transitioned to `PAID`. Payload: `orderId`, `customerId`, `occurredAt`. Consumed by: **Catalog** (confirms its **Stock Reservation**).
+- `OrderCancelled` — an **Order** transitioned to `CANCELLED`. Payload: `orderId`, `reason` (e.g. `PAYMENT_DECLINED`, `INSUFFICIENT_FUNDS`). Consumed by: **Catalog** (releases its **Stock Reservation**).
+
+**Emitted by Payment** (topic `payment.events`):
+- `PaymentSucceeded` — a card cleared the **Payment Simulator**. Payload: `orderId`, `occurredAt`. Consumed by: **Ordering** (drives `OrderPaid`).
+- `PaymentFailed` — a card was declined or had insufficient funds. Payload: `orderId`, `outcome` (`DECLINED` | `INSUFFICIENT_FUNDS`), `occurredAt`. Consumed by: **Ordering** (drives `OrderCancelled`).
+
+Every event has a top-level `eventId` (UUID), `eventType` discriminator, and `occurredAt` timestamp. Consumers MUST dedupe by `eventId` (per-consumer `processed_events` table).
+
+## Example dialogue
+
+> **Dev:** "Catalog releases stock when payment fails, right?"
+> **Domain expert:** "Catalog doesn't know about payments. Catalog releases stock when it sees `OrderCancelled` from **Ordering**. Whether the cancellation was caused by a declined card or by something else is **Ordering**'s business, not Catalog's."
+
+## Flagged ambiguities
+
+- "shopper" / "user" / "customer" used interchangeably in PRD — resolved 2026-05-16: **Customer** = domain actor, **User** = identity row.
+- "PaymentCompleted" was ambiguous (success or just "ran") — resolved 2026-05-16: renamed **PaymentSucceeded**.
+- "stock reserved as columns" vs "reservation as entity" — resolved 2026-05-16: **Stock Reservation** is a first-class aggregate.
+- `FULFILLED` order state — resolved 2026-05-16: dropped for MVP, will return when real fulfillment exists.
