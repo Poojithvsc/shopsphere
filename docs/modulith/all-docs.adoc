@@ -1,0 +1,19 @@
+== ShopSphere
+plantuml::components.puml[]
+
+== Catalog
+plantuml::module-catalog.puml[]
+include::module-catalog.adoc[]
+
+== Ordering
+plantuml::module-ordering.puml[]
+include::module-ordering.adoc[]
+
+== Identity
+plantuml::module-identity.puml[]
+include::module-identity.adoc[]
+
+== Payment
+plantuml::module-payment.puml[]
+include::module-payment.adoc[]
+
