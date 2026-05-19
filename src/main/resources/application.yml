@@ -27,3 +27,9 @@ springdoc:
 
 server:
   port: 8080
+
+shopsphere:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-32-bytes-minimum-aaaa}
+    ttl: PT15M
+
