@@ -1,11 +1,14 @@
 package com.shopsphere.catalog;
 
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -22,5 +25,13 @@ class ProductController {
         return products.findAll(Sort.by("name")).stream()
                 .map(ProductMapper::toDto)
                 .toList();
+    }
+
+    @GetMapping("/{id}")
+    ResponseEntity<ProductDto> getOne(@PathVariable UUID id) {
+        return products.findById(id)
+                .map(ProductMapper::toDto)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
