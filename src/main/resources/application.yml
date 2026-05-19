@@ -15,8 +15,9 @@ spring:
   flyway:
     enabled: true
     default-schema: catalog
-    schemas: catalog
+    schemas: catalog,identity,ordering,payment
     create-schemas: true
+    locations: classpath:db/migration/catalog,classpath:db/migration/identity,classpath:db/migration/ordering,classpath:db/migration/payment
 
 springdoc:
   swagger-ui:
