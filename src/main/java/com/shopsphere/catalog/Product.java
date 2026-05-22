@@ -1,5 +1,6 @@
 package com.shopsphere.catalog;
 
+import com.shopsphere.common.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -45,12 +46,8 @@ class Product {
         return description;
     }
 
-    BigDecimal getUnitPriceAmount() {
-        return unitPriceAmount;
-    }
-
-    String getUnitPriceCurrency() {
-        return unitPriceCurrency;
+    Money getUnitPrice() {
+        return Money.of(unitPriceAmount, unitPriceCurrency);
     }
 
     int getAvailableQty() {

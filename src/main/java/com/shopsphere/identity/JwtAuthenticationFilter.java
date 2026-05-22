@@ -41,13 +41,11 @@ final class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final class JwtAuthentication extends AbstractAuthenticationToken {
 
-        private final UUID userId;
-        private final UUID customerId;
+        private final AuthenticatedPrincipal principal;
 
         JwtAuthentication(JwtIssuer.Verified verified) {
             super(List.of());
-            this.userId = verified.userId();
-            this.customerId = verified.customerId();
+            this.principal = new AuthenticatedPrincipal(verified.userId(), verified.customerId());
             setAuthenticated(true);
         }
 
@@ -58,17 +56,12 @@ final class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         @Override
         public Object getPrincipal() {
-            return userId;
+            return principal;
         }
 
         @Override
         public String getName() {
-            return userId.toString();
-        }
-
-        @SuppressWarnings("unused")
-        UUID customerId() {
-            return customerId;
+            return principal.userId().toString();
         }
     }
 }
