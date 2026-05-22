@@ -23,6 +23,25 @@ class IdentityConfig {
     }
 
     @Bean
+    OpaqueTokenGenerator opaqueTokenGenerator() {
+        return new OpaqueTokenGenerator();
+    }
+
+    @Bean
+    RefreshTokenHasher refreshTokenHasher() {
+        return new RefreshTokenHasher();
+    }
+
+    @Bean
+    RefreshTokenService refreshTokenService(RefreshTokenRepository tokens,
+                                            OpaqueTokenGenerator generator,
+                                            RefreshTokenHasher hasher,
+                                            @Value("${shopsphere.refresh.ttl:P7D}") Duration ttl,
+                                            Clock clock) {
+        return new RefreshTokenService(tokens, generator, hasher, ttl, clock);
+    }
+
+    @Bean
     Clock systemClock() {
         return Clock.systemUTC();
     }

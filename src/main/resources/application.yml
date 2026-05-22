@@ -32,4 +32,6 @@ shopsphere:
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-32-bytes-minimum-aaaa}
     ttl: PT15M
+  refresh:
+    ttl: P7D
 
