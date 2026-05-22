@@ -34,6 +34,20 @@ class Product {
     protected Product() {
     }
 
+    Product(UUID id,
+            String name,
+            String description,
+            BigDecimal unitPriceAmount,
+            String unitPriceCurrency,
+            int availableQty) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+        this.unitPriceAmount = unitPriceAmount;
+        this.unitPriceCurrency = unitPriceCurrency;
+        this.availableQty = availableQty;
+    }
+
     UUID getId() {
         return id;
     }
@@ -52,5 +66,25 @@ class Product {
 
     int getAvailableQty() {
         return availableQty;
+    }
+
+    void decreaseAvailable(int amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("decrement must be positive, got " + amount);
+        }
+        if (this.availableQty < amount) {
+            throw new InsufficientStockException();
+        }
+        this.availableQty -= amount;
+    }
+
+    void increaseAvailable(int amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("increment must be positive, got " + amount);
+        }
+        this.availableQty += amount;
+    }
+
+    static final class InsufficientStockException extends RuntimeException {
     }
 }
