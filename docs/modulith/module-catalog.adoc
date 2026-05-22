@@ -2,4 +2,8 @@
 |===
 |Base package
 |`com.shopsphere.catalog`
+|Spring components
+|_Services_
+
+* `c.s.c.ProductPriceLookup` (via `c.s.c.ProductPriceLookupImpl`)
 |===

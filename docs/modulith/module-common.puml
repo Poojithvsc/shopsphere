@@ -1,6 +1,6 @@
 @startuml
 set separator none
-title Catalog
+title Common
 
 top to bottom direction
 
@@ -10,10 +10,8 @@ top to bottom direction
 
 Container_Boundary("ShopSphere.ShopSphere_boundary", "ShopSphere", $tags="") {
   Component(ShopSphere.ShopSphere.Common, "Common", $techn="Module", $descr="", $tags="", $link="")
-  Component(ShopSphere.ShopSphere.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
 }
 
-Rel(ShopSphere.ShopSphere.Catalog, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 @enduml

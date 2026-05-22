@@ -1,15 +1,14 @@
 package com.shopsphere.catalog;
 
-import java.math.BigDecimal;
+import com.shopsphere.common.Money;
+
 import java.util.UUID;
 
 record ProductDto(
         UUID id,
         String name,
         String description,
-        MoneyDto unitPrice,
+        Money unitPrice,
         int availableQty
 ) {
-    record MoneyDto(BigDecimal amount, String currency) {
-    }
 }

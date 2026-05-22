@@ -1,17 +1,21 @@
 == ShopSphere
 plantuml::components.puml[]
 
-== Ordering
-plantuml::module-ordering.puml[]
-include::module-ordering.adoc[]
+== Common
+plantuml::module-common.puml[]
+include::module-common.adoc[]
+
+== Catalog
+plantuml::module-catalog.puml[]
+include::module-catalog.adoc[]
 
 == Identity
 plantuml::module-identity.puml[]
 include::module-identity.adoc[]
 
-== Catalog
-plantuml::module-catalog.puml[]
-include::module-catalog.adoc[]
+== Ordering
+plantuml::module-ordering.puml[]
+include::module-ordering.adoc[]
 
 == Payment
 plantuml::module-payment.puml[]
