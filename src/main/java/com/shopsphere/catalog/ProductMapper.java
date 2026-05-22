@@ -10,7 +10,7 @@ final class ProductMapper {
                 product.getId(),
                 product.getName(),
                 product.getDescription(),
-                new ProductDto.MoneyDto(product.getUnitPriceAmount(), product.getUnitPriceCurrency()),
+                product.getUnitPrice(),
                 product.getAvailableQty()
         );
     }

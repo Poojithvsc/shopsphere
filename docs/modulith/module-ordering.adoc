@@ -2,4 +2,6 @@
 |===
 |Base package
 |`com.shopsphere.ordering`
+|Bean references
+|* `c.s.c.ProductPriceLookup` (in Catalog)
 |===
