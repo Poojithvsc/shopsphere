@@ -1,0 +1,109 @@
+package com.shopsphere.catalog;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+class CatalogImpl implements Catalog {
+
+    static final String PRODUCT_NOT_FOUND = "PRODUCT_NOT_FOUND";
+    static final String INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK";
+
+    private final ProductRepository products;
+    private final StockReservationRepository reservations;
+    private final Clock clock;
+
+    CatalogImpl(ProductRepository products, StockReservationRepository reservations, Clock clock) {
+        this.products = products;
+        this.reservations = reservations;
+        this.clock = clock;
+    }
+
+    @Override
+    @Transactional
+    public ReservationOutcome reserve(UUID orderId, List<ReservationItem> items) {
+        List<Decision> decisions = new ArrayList<>(items.size());
+        boolean anyDenied = false;
+        for (ReservationItem item : items) {
+            Optional<Product> productOpt = products.findByIdForUpdate(item.productId());
+            if (productOpt.isEmpty()) {
+                decisions.add(Decision.denied(item, PRODUCT_NOT_FOUND));
+                anyDenied = true;
+                continue;
+            }
+            Product product = productOpt.get();
+            if (product.getAvailableQty() < item.qty()) {
+                decisions.add(Decision.denied(item, INSUFFICIENT_STOCK));
+                anyDenied = true;
+                continue;
+            }
+            decisions.add(Decision.granted(item, product));
+        }
+
+        boolean allGranted = !anyDenied;
+        if (allGranted) {
+            Instant now = clock.instant();
+            for (Decision d : decisions) {
+                d.product().decreaseAvailable(d.item().qty());
+                reservations.save(new StockReservation(
+                        UUID.randomUUID(), orderId, d.item().productId(), d.item().qty(), now));
+            }
+        }
+
+        List<ReservationLine> lines = decisions.stream()
+                .map(Decision::toLine)
+                .toList();
+        return new ReservationOutcome(orderId, lines, allGranted);
+    }
+
+    @Override
+    @Transactional
+    public void confirm(UUID orderId) {
+        for (StockReservation r : reservations.findAllByOrderIdAndStatus(orderId, StockReservation.Status.HELD)) {
+            r.confirm();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void release(UUID orderId) {
+        List<StockReservation> held = reservations.findAllByOrderIdAndStatus(orderId, StockReservation.Status.HELD);
+        for (StockReservation r : held) {
+            Product product = products.findByIdForUpdate(r.getProductId())
+                    .orElseThrow(() -> new IllegalStateException("missing product " + r.getProductId()));
+            product.increaseAvailable(r.getQty());
+            r.release();
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<HeldReservation> findHeldForOrder(UUID orderId) {
+        return reservations.findAllByOrderIdAndStatus(orderId, StockReservation.Status.HELD).stream()
+                .map(r -> new HeldReservation(r.getProductId(), r.getQty()))
+                .toList();
+    }
+
+    private record Decision(ReservationItem item, Product product, LineStatus status, String reason) {
+        static Decision granted(ReservationItem item, Product product) {
+            return new Decision(item, product, LineStatus.GRANTED, null);
+        }
+
+        static Decision denied(ReservationItem item, String reason) {
+            return new Decision(item, null, LineStatus.DENIED, reason);
+        }
+
+        ReservationLine toLine() {
+            return status == LineStatus.GRANTED
+                    ? ReservationLine.granted(item.productId(), item.qty())
+                    : ReservationLine.denied(item.productId(), item.qty(), reason);
+        }
+    }
+}
