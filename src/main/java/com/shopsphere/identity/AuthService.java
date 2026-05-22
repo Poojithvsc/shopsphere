@@ -13,17 +13,20 @@ class AuthService {
     private final CustomerRepository customers;
     private final PasswordHasher hasher;
     private final JwtIssuer jwt;
+    private final RefreshTokenService refreshTokens;
     private final Clock clock;
 
     AuthService(UserRepository users,
                 CustomerRepository customers,
                 PasswordHasher hasher,
                 JwtIssuer jwt,
+                RefreshTokenService refreshTokens,
                 Clock clock) {
         this.users = users;
         this.customers = customers;
         this.hasher = hasher;
         this.jwt = jwt;
+        this.refreshTokens = refreshTokens;
         this.clock = clock;
     }
 
@@ -40,20 +43,42 @@ class AuthService {
         return new Registered(userId, customerId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     Token login(String email, String rawPassword) {
         User user = users.findByEmail(email).orElseThrow(BadCredentialsException::new);
         if (!hasher.matches(rawPassword, user.getPasswordHash())) {
             throw new BadCredentialsException();
         }
-        String token = jwt.issue(user.getId(), user.getCustomerId());
-        return new Token(token, jwt.ttlSeconds());
+        return issueTokens(user.getId(), user.getCustomerId());
+    }
+
+    @Transactional(noRollbackFor = RefreshTokenService.InvalidRefreshTokenException.class)
+    Token refresh(String presentedRefreshToken) {
+        RefreshTokenService.Issued issued = refreshTokens.rotate(presentedRefreshToken);
+        User user = users.findById(issued.userId())
+                .orElseThrow(RefreshTokenService.InvalidRefreshTokenException::new);
+        String access = jwt.issue(user.getId(), user.getCustomerId());
+        return new Token(access, jwt.ttlSeconds(), issued.rawToken(), issued.expiresInSeconds());
+    }
+
+    @Transactional
+    void logout(String presentedRefreshToken) {
+        refreshTokens.revoke(presentedRefreshToken);
+    }
+
+    private Token issueTokens(UUID userId, UUID customerId) {
+        String access = jwt.issue(userId, customerId);
+        RefreshTokenService.Issued issued = refreshTokens.issueNew(userId);
+        return new Token(access, jwt.ttlSeconds(), issued.rawToken(), issued.expiresInSeconds());
     }
 
     record Registered(UUID userId, UUID customerId) {
     }
 
-    record Token(String accessToken, long expiresIn) {
+    record Token(String accessToken,
+                 long expiresIn,
+                 String refreshToken,
+                 long refreshExpiresIn) {
     }
 
     static final class DuplicateEmailException extends RuntimeException {

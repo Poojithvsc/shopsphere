@@ -35,7 +35,19 @@ class AuthController {
     @PostMapping("/login")
     LoginResponse login(@Valid @RequestBody LoginRequest request) {
         var token = auth.login(request.email(), request.password());
-        return new LoginResponse(token.accessToken(), token.expiresIn());
+        return LoginResponse.from(token);
+    }
+
+    @PostMapping("/refresh")
+    LoginResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        var token = auth.refresh(request.refreshToken());
+        return LoginResponse.from(token);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(@Valid @RequestBody RefreshRequest request) {
+        auth.logout(request.refreshToken());
     }
 
     @ExceptionHandler(AuthService.DuplicateEmailException.class)
@@ -45,6 +57,11 @@ class AuthController {
 
     @ExceptionHandler(AuthService.BadCredentialsException.class)
     ResponseEntity<Void> badCredentials() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+
+    @ExceptionHandler(RefreshTokenService.InvalidRefreshTokenException.class)
+    ResponseEntity<Void> invalidRefresh() {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
@@ -61,6 +78,19 @@ class AuthController {
             @NotBlank String password) {
     }
 
-    record LoginResponse(String accessToken, long expiresIn) {
+    record RefreshRequest(@NotBlank String refreshToken) {
+    }
+
+    record LoginResponse(String accessToken,
+                         long expiresIn,
+                         String refreshToken,
+                         long refreshExpiresIn) {
+        static LoginResponse from(AuthService.Token token) {
+            return new LoginResponse(
+                    token.accessToken(),
+                    token.expiresIn(),
+                    token.refreshToken(),
+                    token.refreshExpiresIn());
+        }
     }
 }
