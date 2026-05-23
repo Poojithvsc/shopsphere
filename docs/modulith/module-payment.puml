@@ -9,9 +9,11 @@ top to bottom direction
 !include <C4/C4_Component>
 
 Container_Boundary("ShopSphere.ShopSphere_boundary", "ShopSphere", $tags="") {
+  Component(ShopSphere.ShopSphere.Common, "Common", $techn="Module", $descr="", $tags="", $link="")
   Component(ShopSphere.ShopSphere.Payment, "Payment", $techn="Module", $descr="", $tags="", $link="")
 }
 
+Rel(ShopSphere.ShopSphere.Payment, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 @enduml
