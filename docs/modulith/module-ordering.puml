@@ -10,9 +10,9 @@ top to bottom direction
 
 Container_Boundary("ShopSphere.ShopSphere_boundary", "ShopSphere", $tags="") {
   Component(ShopSphere.ShopSphere.Common, "Common", $techn="Module", $descr="", $tags="", $link="")
-  Component(ShopSphere.ShopSphere.Identity, "Identity", $techn="Module", $descr="", $tags="", $link="")
-  Component(ShopSphere.ShopSphere.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
   Component(ShopSphere.ShopSphere.Ordering, "Ordering", $techn="Module", $descr="", $tags="", $link="")
+  Component(ShopSphere.ShopSphere.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
+  Component(ShopSphere.ShopSphere.Identity, "Identity", $techn="Module", $descr="", $tags="", $link="")
 }
 
 Rel(ShopSphere.ShopSphere.Ordering, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
