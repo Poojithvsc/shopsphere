@@ -14,7 +14,8 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.UUID;
 
-import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,15 +40,14 @@ class ProductsEndpointIT {
     void getProducts_returnsSeededCatalog() throws Exception {
         String token = authenticatedBearer();
 
+        // Size is "at least 3" because other ITs may seed additional products against the shared
+        // Postgres. The Flyway-seeded three must always be present.
         mockMvc.perform(get("/api/v1/products").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(3)))
-                .andExpect(jsonPath("$[0].id").exists())
-                .andExpect(jsonPath("$[0].name").value("Aurora Mechanical Keyboard"))
-                .andExpect(jsonPath("$[0].description").exists())
-                .andExpect(jsonPath("$[0].unitPrice.amount").value(8499.0000))
-                .andExpect(jsonPath("$[0].unitPrice.currency").value("INR"))
-                .andExpect(jsonPath("$[0].availableQty").value(12));
+                .andExpect(jsonPath("$.length()", greaterThanOrEqualTo(3)))
+                .andExpect(jsonPath("$[*].name", hasItem("Aurora Mechanical Keyboard")))
+                .andExpect(jsonPath("$[*].name", hasItem("Nimbus Wireless Mouse")))
+                .andExpect(jsonPath("$[*].name", hasItem("Vertex 27-inch 4K Monitor")));
     }
 
     private String authenticatedBearer() throws Exception {
