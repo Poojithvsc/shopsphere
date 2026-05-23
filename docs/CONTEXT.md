@@ -2,7 +2,7 @@
 project: shopsphere
 type: context
 status: populated
-updated: 2026-05-16
+updated: 2026-05-23
 ---
 
 # ShopSphere â€” CONTEXT
@@ -62,8 +62,16 @@ The state of an **Order**. MVP states: `PENDING_PAYMENT` (created, awaiting paym
 _Avoid_: state, phase, stage.
 
 **Payment Outcome**:
-The result of running a card through the **Payment Simulator**. Exactly one of: `SUCCEEDED`, `DECLINED`, `INSUFFICIENT_FUNDS`. The latter two both cancel the **Order**; they exist as distinct outcomes because the payment article distinguishes them and the test card numbers do too.
+The result of running a card through the **Payment Simulator**. A sealed type with two variants: `Succeeded(amount)` and `Failed(reason)`. The `reason` carries a **Payment Failed Reason**.
 _Avoid_: PaymentResult, PaymentStatus (collides with Order Status), failure.
+
+**Payment Failed Reason**:
+Why a payment failed. Exactly one of `DECLINED` or `INSUFFICIENT_FUNDS`. Both cancel the **Order**; they exist as distinct values because the test card numbers do (`4000 0000 0000 0002` â†’ `DECLINED`; `4000 0000 0000 9995` â†’ `INSUFFICIENT_FUNDS`) and consumers may want different downstream behaviour later.
+_Avoid_: PaymentFailure, error code.
+
+**Processed Event**:
+A `(consumer_id, event_id)` row in a module's `processed_events` table. Inserted in the same transaction as the consumer's side effect; on duplicate-key the consumer skips work. The dedupe boundary that makes at-least-once Kafka delivery safe.
+_Avoid_: consumed_event, seen_event, idempotency_key.
 
 ## Relationships
 
@@ -100,15 +108,15 @@ Cross-schema joins are forbidden. Contexts reference each other only by id (`Cus
 Each context publishes events about *its own* concepts only.
 
 **Emitted by Ordering** (topic `ordering.events`):
-- `OrderPlaced` â€” a new **Order** entered `PENDING_PAYMENT`. Payload: `orderId`, `customerId`, `lineItems`, `total`, `occurredAt`. Consumed by: **Payment**.
-- `OrderPaid` â€” an **Order** transitioned to `PAID`. Payload: `orderId`, `customerId`, `occurredAt`. Consumed by: **Catalog** (confirms its **Stock Reservation**).
-- `OrderCancelled` â€” an **Order** transitioned to `CANCELLED`. Payload: `orderId`, `reason` (e.g. `PAYMENT_DECLINED`, `INSUFFICIENT_FUNDS`). Consumed by: **Catalog** (releases its **Stock Reservation**).
+- `OrderPlaced` â€” a new **Order** entered `PENDING_PAYMENT`. Payload: `orderId`, `customerId`, `total` (**Money**), `cardNumber` (MVP only â€” passed through to **Payment Simulator**; tokenise before production), `lines` (snapshotted `{productId, name, unitPrice, qty}`). Consumed by: **Payment**.
+- `OrderPaid` â€” an **Order** transitioned to `PAID`. Payload: `orderId`, `customerId`. Consumed by: **Catalog** (confirms its **Stock Reservation**).
+- `OrderCancelled` â€” an **Order** transitioned to `CANCELLED`. Payload: `orderId`, `customerId`, `reason` (string carrying the **Payment Failed Reason** value: `DECLINED` or `INSUFFICIENT_FUNDS`). Consumed by: **Catalog** (releases its **Stock Reservation**).
 
 **Emitted by Payment** (topic `payment.events`):
-- `PaymentSucceeded` â€” a card cleared the **Payment Simulator**. Payload: `orderId`, `occurredAt`. Consumed by: **Ordering** (drives `OrderPaid`).
-- `PaymentFailed` â€” a card was declined or had insufficient funds. Payload: `orderId`, `outcome` (`DECLINED` | `INSUFFICIENT_FUNDS`), `occurredAt`. Consumed by: **Ordering** (drives `OrderCancelled`).
+- `PaymentSucceeded` â€” a card cleared the **Payment Simulator**. Payload: `orderId`, `customerId`, `amount` (**Money**). Consumed by: **Ordering** (drives `OrderPaid`).
+- `PaymentFailed` â€” a card was declined or had insufficient funds. Payload: `orderId`, `customerId`, `reason` (`DECLINED` | `INSUFFICIENT_FUNDS`). Consumed by: **Ordering** (drives `OrderCancelled`).
 
-Every event has a top-level `eventId` (UUID), `eventType` discriminator, and `occurredAt` timestamp. Consumers MUST dedupe by `eventId` (per-consumer `processed_events` table).
+Every event has top-level `eventType` (string discriminator), `eventId` (UUID), and `occurredAt` (Instant). Consumers MUST dedupe by `eventId` via a per-consumer `<schema>.processed_events(consumer_id, event_id)` table; the dedupe insert lives in the same transaction as the state mutation so a rollback unwinds it.
 
 ## Example dialogue
 
