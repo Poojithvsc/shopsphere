@@ -28,6 +28,16 @@ springdoc:
 server:
   port: 8080
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  modulith:
+    events:
+      externalization:
+        enabled: true
+
 shopsphere:
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-32-bytes-minimum-aaaa}

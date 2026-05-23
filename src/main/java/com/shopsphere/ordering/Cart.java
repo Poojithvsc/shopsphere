@@ -78,6 +78,13 @@ class Cart {
         this.updatedAt = now;
     }
 
+    void clearItems(Instant now) {
+        if (!items.isEmpty()) {
+            items.clear();
+            this.updatedAt = now;
+        }
+    }
+
     boolean removeLine(UUID productId, Instant now) {
         boolean removed = items.removeIf(i -> i.getProductId().equals(productId));
         if (removed) {
