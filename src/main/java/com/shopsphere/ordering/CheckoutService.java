@@ -83,10 +83,10 @@ class CheckoutService {
                 order.getId(),
                 customerId,
                 runningTotal,
+                cardNumber,
                 List.copyOf(eventLines));
         events.publishEvent(placed);
 
-        // cardNumber accepted but unused (Phase 8).
         return new PlacedOrder(order.getId(), order.getStatus());
     }
 

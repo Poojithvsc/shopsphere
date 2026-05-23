@@ -18,6 +18,21 @@ spring:
     schemas: catalog,identity,ordering,payment
     create-schemas: true
     locations: classpath:db/migration/catalog,classpath:db/migration/identity,classpath:db/migration/ordering,classpath:db/migration/payment
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+  modulith:
+    events:
+      externalization:
+        enabled: true
 
 springdoc:
   swagger-ui:
@@ -28,20 +43,9 @@ springdoc:
 server:
   port: 8080
 
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-  modulith:
-    events:
-      externalization:
-        enabled: true
-
 shopsphere:
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-32-bytes-minimum-aaaa}
     ttl: PT15M
   refresh:
     ttl: P7D
-

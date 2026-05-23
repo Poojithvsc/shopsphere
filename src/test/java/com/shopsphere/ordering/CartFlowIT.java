@@ -2,17 +2,16 @@ package com.shopsphere.ordering;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shopsphere.SharedContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -26,7 +25,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Testcontainers
 class CartFlowIT {
 
     private static final UUID KEYBOARD = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -34,9 +32,10 @@ class CartFlowIT {
     private static final BigDecimal KEYBOARD_PRICE = new BigDecimal("8499.0000");
     private static final BigDecimal MOUSE_PRICE    = new BigDecimal("5999.0000");
 
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+    @DynamicPropertySource
+    static void containers(DynamicPropertyRegistry registry) {
+        SharedContainers.registerProperties(registry);
+    }
 
     @Autowired
     MockMvc mockMvc;
