@@ -13,12 +13,14 @@ Container_Boundary("ShopSphere.ShopSphere_boundary", "ShopSphere", $tags="") {
   Component(ShopSphere.ShopSphere.Ordering, "Ordering", $techn="Module", $descr="", $tags="", $link="")
   Component(ShopSphere.ShopSphere.Catalog, "Catalog", $techn="Module", $descr="", $tags="", $link="")
   Component(ShopSphere.ShopSphere.Identity, "Identity", $techn="Module", $descr="", $tags="", $link="")
+  Component(ShopSphere.ShopSphere.Payment, "Payment", $techn="Module", $descr="", $tags="", $link="")
 }
 
-Rel(ShopSphere.ShopSphere.Ordering, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 Rel(ShopSphere.ShopSphere.Ordering, ShopSphere.ShopSphere.Catalog, "uses", $techn="", $tags="", $link="")
+Rel(ShopSphere.ShopSphere.Payment, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 Rel(ShopSphere.ShopSphere.Catalog, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 Rel(ShopSphere.ShopSphere.Ordering, ShopSphere.ShopSphere.Identity, "depends on", $techn="", $tags="", $link="")
+Rel(ShopSphere.ShopSphere.Ordering, ShopSphere.ShopSphere.Common, "depends on", $techn="", $tags="", $link="")
 
 SHOW_LEGEND(true)
 @enduml
