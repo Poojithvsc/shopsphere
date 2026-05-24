@@ -6,6 +6,12 @@
     <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
             <customFields>{"app":"${appName}"}</customFields>
+            <!-- Rename a few defaults to the conventional names assertions/dashboards expect. -->
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <logger>logger</logger>
+                <thread>thread</thread>
+            </fieldNames>
         </encoder>
     </appender>
 

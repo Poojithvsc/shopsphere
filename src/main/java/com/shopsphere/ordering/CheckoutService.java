@@ -3,6 +3,11 @@ package com.shopsphere.ordering;
 import com.shopsphere.catalog.Catalog;
 import com.shopsphere.catalog.ProductPriceLookup;
 import com.shopsphere.common.Money;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +22,7 @@ import java.util.UUID;
 class CheckoutService {
 
     private static final String DEFAULT_CURRENCY = "INR";
+    private static final Logger log = LoggerFactory.getLogger(CheckoutService.class);
 
     private final CartRepository carts;
     private final OrderRepository orders;
@@ -24,23 +30,46 @@ class CheckoutService {
     private final ProductPriceLookup catalogPrices;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final MeterRegistry meters;
 
     CheckoutService(CartRepository carts,
                     OrderRepository orders,
                     Catalog catalog,
                     ProductPriceLookup catalogPrices,
                     ApplicationEventPublisher events,
-                    Clock clock) {
+                    Clock clock,
+                    MeterRegistry meters) {
         this.carts = carts;
         this.orders = orders;
         this.catalog = catalog;
         this.catalogPrices = catalogPrices;
         this.events = events;
         this.clock = clock;
+        this.meters = meters;
     }
 
     @Transactional
     PlacedOrder checkout(UUID customerId, String shippingAddress, String cardNumber) {
+        Timer.Sample sample = Timer.start(meters);
+        String outcome = "placed";
+        try {
+            return doCheckout(customerId, shippingAddress, cardNumber);
+        } catch (EmptyCartException e) {
+            outcome = "empty_cart";
+            throw e;
+        } catch (InsufficientStockException e) {
+            outcome = "insufficient_stock";
+            throw e;
+        } finally {
+            sample.stop(Timer.builder("checkout_latency_seconds")
+                    .description("Checkout endpoint latency")
+                    .publishPercentileHistogram()
+                    .register(meters));
+            meters.counter("orders_placed_total", "outcome", outcome).increment();
+        }
+    }
+
+    private PlacedOrder doCheckout(UUID customerId, String shippingAddress, String cardNumber) {
         Cart cart = carts.findByCustomerId(customerId).orElseThrow(EmptyCartException::new);
         if (cart.getItems().isEmpty()) {
             throw new EmptyCartException();
@@ -86,6 +115,17 @@ class CheckoutService {
                 cardNumber,
                 List.copyOf(eventLines));
         events.publishEvent(placed);
+
+        // Structured, contextual log line — orderId/customerId land as top-level JSON fields via MDC.
+        MDC.put("orderId", order.getId().toString());
+        MDC.put("customerId", customerId.toString());
+        try {
+            log.info("Order placed with {} line(s), total {} {}",
+                    eventLines.size(), runningTotal.amount(), runningTotal.currency());
+        } finally {
+            MDC.remove("orderId");
+            MDC.remove("customerId");
+        }
 
         return new PlacedOrder(order.getId(), order.getStatus());
     }

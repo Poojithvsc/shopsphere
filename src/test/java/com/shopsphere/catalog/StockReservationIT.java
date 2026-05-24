@@ -1,6 +1,7 @@
 package com.shopsphere.catalog;
 
 import com.shopsphere.SharedContainers;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,14 +35,21 @@ class StockReservationIT {
     @Autowired
     StockReservationRepository reservations;
 
+    @Autowired
+    MeterRegistry meters;
+
     @Test
     void reserveGrantedDecreasesAvailableQtyAndInsertsHeldRow() {
         UUID productId = seedProduct(5);
         UUID orderId = UUID.randomUUID();
+        double heldBefore = meters.counter("reservations_total", "status", "held").count();
 
         Catalog.ReservationOutcome outcome = catalog.reserve(orderId,
                 List.of(new Catalog.ReservationItem(productId, 3)));
 
+        // reserve runs synchronously on this thread, so the counter is immediately observable.
+        assertThat(meters.counter("reservations_total", "status", "held").count())
+                .isEqualTo(heldBefore + 1);
         assertThat(outcome.allGranted()).isTrue();
         assertThat(outcome.lines()).singleElement().satisfies(line -> {
             assertThat(line.status()).isEqualTo(Catalog.LineStatus.GRANTED);
@@ -107,17 +115,23 @@ class StockReservationIT {
         UUID productId = seedProduct(4);
         UUID orderId = UUID.randomUUID();
         catalog.reserve(orderId, List.of(new Catalog.ReservationItem(productId, 2)));
+        double confirmedBefore = meters.counter("reservations_total", "status", "confirmed").count();
 
         catalog.confirm(orderId);
 
         assertThat(reservations.findAllByOrderId(orderId)).singleElement().satisfies(r ->
                 assertThat(r.getStatus()).isEqualTo(StockReservation.Status.CONFIRMED));
         assertThat(products.findById(productId).orElseThrow().getAvailableQty()).isEqualTo(2);
+        assertThat(meters.counter("reservations_total", "status", "confirmed").count())
+                .isEqualTo(confirmedBefore + 1);
 
-        // Idempotent: second call leaves CONFIRMED alone
+        // Idempotent: second call leaves CONFIRMED alone — and must NOT re-count the metric
+        // (this is the same dedupe guarantee a redelivered OrderPaid event relies on).
         catalog.confirm(orderId);
         assertThat(reservations.findAllByOrderId(orderId)).singleElement().satisfies(r ->
                 assertThat(r.getStatus()).isEqualTo(StockReservation.Status.CONFIRMED));
+        assertThat(meters.counter("reservations_total", "status", "confirmed").count())
+                .isEqualTo(confirmedBefore + 1);
     }
 
     @Test
@@ -126,18 +140,23 @@ class StockReservationIT {
         UUID orderId = UUID.randomUUID();
         catalog.reserve(orderId, List.of(new Catalog.ReservationItem(productId, 3)));
         assertThat(products.findById(productId).orElseThrow().getAvailableQty()).isEqualTo(1);
+        double releasedBefore = meters.counter("reservations_total", "status", "released").count();
 
         catalog.release(orderId);
 
         assertThat(reservations.findAllByOrderId(orderId)).singleElement().satisfies(r ->
                 assertThat(r.getStatus()).isEqualTo(StockReservation.Status.RELEASED));
         assertThat(products.findById(productId).orElseThrow().getAvailableQty()).isEqualTo(4);
+        assertThat(meters.counter("reservations_total", "status", "released").count())
+                .isEqualTo(releasedBefore + 1);
 
-        // Idempotent: second release doesn't double-restore
+        // Idempotent: second release doesn't double-restore — and must NOT re-count the metric.
         catalog.release(orderId);
         assertThat(products.findById(productId).orElseThrow().getAvailableQty()).isEqualTo(4);
         assertThat(reservations.findAllByOrderId(orderId)).singleElement().satisfies(r ->
                 assertThat(r.getStatus()).isEqualTo(StockReservation.Status.RELEASED));
+        assertThat(meters.counter("reservations_total", "status", "released").count())
+                .isEqualTo(releasedBefore + 1);
     }
 
     @Test
