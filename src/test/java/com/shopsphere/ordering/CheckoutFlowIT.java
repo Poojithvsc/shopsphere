@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopsphere.SharedContainers;
 import com.shopsphere.catalog.Catalog;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -54,11 +55,17 @@ class CheckoutFlowIT {
     @Autowired
     Catalog catalog;
 
+    @Autowired
+    MeterRegistry meters;
+
     @Test
     void successfulCheckoutReturns202AndPublishesOrderPlaced() throws Exception {
         String token = registerAndLogin();
         addToCart(token, KEYBOARD, 2);
         addToCart(token, MOUSE, 1);
+
+        double placedBefore = meters.counter("orders_placed_total", "outcome", "placed").count();
+        double heldBefore = meters.counter("reservations_total", "status", "held").count();
 
         MvcResult posted = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
@@ -74,6 +81,14 @@ class CheckoutFlowIT {
 
         // Stock reserved (held)
         assertThat(catalog.findHeldForOrder(orderId)).hasSize(2);
+
+        // Micrometer counters moved: one placement, two held reservations
+        assertThat(meters.counter("orders_placed_total", "outcome", "placed").count())
+                .isEqualTo(placedBefore + 1);
+        assertThat(meters.counter("reservations_total", "status", "held").count())
+                .isEqualTo(heldBefore + 2);
+        // Checkout latency histogram recorded at least one sample
+        assertThat(meters.find("checkout_latency_seconds").timer()).isNotNull();
 
         // Cart empty after checkout
         mockMvc.perform(get("/api/v1/cart").header("Authorization", "Bearer " + token))
