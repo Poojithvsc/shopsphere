@@ -1,5 +1,6 @@
 package com.shopsphere.catalog;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,11 +20,19 @@ class CatalogImpl implements Catalog {
     private final ProductRepository products;
     private final StockReservationRepository reservations;
     private final Clock clock;
+    private final MeterRegistry meters;
 
-    CatalogImpl(ProductRepository products, StockReservationRepository reservations, Clock clock) {
+    CatalogImpl(ProductRepository products, StockReservationRepository reservations, Clock clock, MeterRegistry meters) {
         this.products = products;
         this.reservations = reservations;
         this.clock = clock;
+        this.meters = meters;
+    }
+
+    private void countReservations(String status, long n) {
+        if (n > 0) {
+            meters.counter("reservations_total", "status", status).increment(n);
+        }
     }
 
     @Override
@@ -55,6 +64,7 @@ class CatalogImpl implements Catalog {
                 reservations.save(new StockReservation(
                         UUID.randomUUID(), orderId, d.item().productId(), d.item().qty(), now));
             }
+            countReservations("held", decisions.size());
         }
 
         List<ReservationLine> lines = decisions.stream()
@@ -66,9 +76,11 @@ class CatalogImpl implements Catalog {
     @Override
     @Transactional
     public void confirm(UUID orderId) {
-        for (StockReservation r : reservations.findAllByOrderIdAndStatus(orderId, StockReservation.Status.HELD)) {
+        List<StockReservation> held = reservations.findAllByOrderIdAndStatus(orderId, StockReservation.Status.HELD);
+        for (StockReservation r : held) {
             r.confirm();
         }
+        countReservations("confirmed", held.size());
     }
 
     @Override
@@ -81,6 +93,7 @@ class CatalogImpl implements Catalog {
             product.increaseAvailable(r.getQty());
             r.release();
         }
+        countReservations("released", held.size());
     }
 
     @Override

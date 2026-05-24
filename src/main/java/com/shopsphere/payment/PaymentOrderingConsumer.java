@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopsphere.common.Money;
 import com.shopsphere.common.ProcessedEvents;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.Locale;
 import java.util.UUID;
 
 @Component
@@ -27,17 +29,20 @@ class PaymentOrderingConsumer {
     private final ProcessedEvents processedEvents;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final MeterRegistry meters;
 
     PaymentOrderingConsumer(ObjectMapper mapper,
                             PaymentSimulator simulator,
                             JdbcTemplate jdbc,
                             ApplicationEventPublisher events,
-                            Clock clock) {
+                            Clock clock,
+                            MeterRegistry meters) {
         this.mapper = mapper;
         this.simulator = simulator;
         this.processedEvents = new ProcessedEvents(jdbc, "payment");
         this.events = events;
         this.clock = clock;
+        this.meters = meters;
     }
 
     @KafkaListener(topics = "ordering.events", groupId = CONSUMER_ID)
@@ -58,12 +63,20 @@ class PaymentOrderingConsumer {
 
     void process(OrderPlacedView placed) {
         PaymentSimulator.PaymentOutcome outcome = simulator.process(placed.cardNumber, placed.total);
-        switch (outcome) {
-            case PaymentSimulator.PaymentOutcome.Succeeded s -> events.publishEvent(new PaymentSucceeded(
-                    UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, s.amount()));
-            case PaymentSimulator.PaymentOutcome.Failed f -> events.publishEvent(new PaymentFailed(
-                    UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, f.reason()));
-        }
+        String metricOutcome = switch (outcome) {
+            case PaymentSimulator.PaymentOutcome.Succeeded s -> {
+                events.publishEvent(new PaymentSucceeded(
+                        UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, s.amount()));
+                yield "succeeded";
+            }
+            case PaymentSimulator.PaymentOutcome.Failed f -> {
+                events.publishEvent(new PaymentFailed(
+                        UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, f.reason()));
+                yield f.reason().name().toLowerCase(Locale.ROOT);
+            }
+        };
+        // Counted only here, downstream of the markProcessed dedupe gate — redelivery never re-counts.
+        meters.counter("payments_total", "outcome", metricOutcome).increment();
     }
 
     private static String textOrNull(JsonNode tree, String field) {

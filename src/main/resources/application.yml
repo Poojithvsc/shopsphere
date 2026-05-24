@@ -40,6 +40,20 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,modulith
+  endpoint:
+    health:
+      show-details: always
+  info:
+    git:
+      mode: full
+    build:
+      enabled: true
+
 server:
   port: 8080
 
