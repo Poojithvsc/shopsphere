@@ -58,21 +58,23 @@ mvn verify        # full build: unit + Testcontainers integration tests; this is
 
 ## Running locally
 
-The app expects external services (see `src/main/resources/application.yml`):
-
-- Postgres 16 at `localhost:5432`, database / user / password all `shopsphere`
-- Kafka at `localhost:9092` (override with `KAFKA_BOOTSTRAP_SERVERS`)
-- `JWT_SECRET` env var (≥ 32 bytes; a dev-only default is used if unset)
-
-With those up:
+`docker-compose.yml` provides the two backing services (Postgres 16 + Kafka, image versions pinned to match the test suite):
 
 ```bash
-mvn spring-boot:run
+docker compose up -d        # start Postgres + Kafka
+mvn spring-boot:run         # run the app on the host against them
 ```
 
-Then browse `/swagger-ui.html` and `/actuator/health`.
+Defaults come from `src/main/resources/application.yml`: Postgres at `localhost:5432` (db/user/password all `shopsphere`), Kafka at `localhost:9092`, and a dev-only `JWT_SECRET` fallback (override with the env var for anything real).
 
-> There is no `docker-compose.yml` yet — stand up Postgres + Kafka manually for now.
+Once up:
+
+- Swagger UI — http://localhost:8080/swagger-ui.html
+- Health — http://localhost:8080/actuator/health
+
+Stop with `docker compose down` (keeps the database) or `docker compose down -v` (wipes it).
+
+See **[docs/local-dev.md](docs/local-dev.md)** for the full QA runbook — an end-to-end curl flow (register → login → cart → checkout → order paid) and the payment test cards.
 
 ## Observability
 
