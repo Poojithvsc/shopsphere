@@ -1,0 +1,62 @@
+# Local-development stack for ShopSphere.
+#
+#   docker compose up -d        # start Postgres + Kafka
+#   mvn spring-boot:run         # run the app on the host against this stack
+#   docker compose down         # stop (keeps the pg volume)
+#   docker compose down -v      # stop and wipe the database
+#
+# Image versions are pinned to match the Testcontainers setup in
+# src/test/java/com/shopsphere/SharedContainers.java so local runs and CI
+# exercise the same Postgres/Kafka versions.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: shopsphere-postgres
+    environment:
+      POSTGRES_DB: shopsphere
+      POSTGRES_USER: shopsphere
+      POSTGRES_PASSWORD: shopsphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - shopsphere-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopsphere -d shopsphere"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: shopsphere-kafka
+    ports:
+      # Host clients (the app via `mvn spring-boot:run`) connect here.
+      - "9092:9092"
+    environment:
+      # --- KRaft single-node (no ZooKeeper) ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Two broker listeners: PLAINTEXT for in-cluster traffic, PLAINTEXT_HOST
+      # advertised as localhost so a process on the host can reach the broker.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # Single-node replication factors.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Fixed cluster id so the KRaft metadata log survives restarts.
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+volumes:
+  shopsphere-pgdata:
