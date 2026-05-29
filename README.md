@@ -58,14 +58,20 @@ mvn verify        # full build: unit + Testcontainers integration tests; this is
 
 ## Running locally
 
-`docker-compose.yml` provides the two backing services (Postgres 16 + Kafka, image versions pinned to match the test suite):
+Two ways to run, same `docker-compose.yml`:
 
 ```bash
-docker compose up -d        # start Postgres + Kafka
-mvn spring-boot:run         # run the app on the host against them
+# Dev — fast inner loop, JVM on host
+docker compose up -d                            # Postgres + Kafka only
+mvn spring-boot:run                             # app on the host
+
+# Prod-parity — JVM in a container too
+docker compose --profile full up -d --build    # Postgres + Kafka + app
 ```
 
-Defaults come from `src/main/resources/application.yml`: Postgres at `localhost:5432` (db/user/password all `shopsphere`), Kafka at `localhost:9092`, and a dev-only `JWT_SECRET` fallback (override with the env var for anything real).
+The `app` service is gated behind the `full` profile, so the default `docker compose up -d` continues to bring up only Postgres + Kafka — muscle memory is preserved. The prod-parity mode builds the image from the multi-stage `Dockerfile` and runs everything in containers; see [ADR-0010](docs/adr/0010-containerization-multi-stage-dockerfile-and-compose-profiles.md) for the design rationale.
+
+Defaults come from `src/main/resources/application.yml`: Postgres at `localhost:5432` (db/user/password all `shopsphere`), Kafka at `localhost:9092`, and a dev-only `JWT_SECRET` fallback. All three are overridable per `${VAR:default}` substitution — `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS`, `JWT_SECRET`.
 
 Once up:
 
@@ -90,7 +96,7 @@ Design decisions are anchored on — and every ADR cites at least one of:
 - **Extreme Programming Explained** (Beck)
 - **The Pragmatic Programmer** (Hunt & Thomas)
 
-See `docs/adr/` (ADR-0001 … ADR-0009) and the ubiquitous-language glossary in `docs/CONTEXT.md`.
+See `docs/adr/` (ADR-0001 … ADR-0010) and the ubiquitous-language glossary in `docs/CONTEXT.md`.
 
 ## Branching & commits
 

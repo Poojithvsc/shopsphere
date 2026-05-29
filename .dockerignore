@@ -1,0 +1,37 @@
+# Build output — re-built inside the image
+target/
+
+# Git metadata — git-commit-id plugin reads .git during the Maven build, but the
+# fat jar already embeds git.properties, so the runtime layer doesn't need it.
+.git/
+.gitignore
+.gitattributes
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Logs
+*.log
+logs/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local env / secrets that must never be baked into an image
+.env
+.env.*
+application-local.yml
+application-local.properties
+application-secret.*
+*.pem
+*.key
+
+# Docs / vault — not needed at build time
+docs/
+README.md
