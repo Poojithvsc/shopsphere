@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-#
 # Multi-stage Dockerfile for ShopSphere.
 #
 # Stage 1 builds the fat jar with Maven. Stage 2 extracts Spring Boot's layered
