@@ -1,0 +1,19 @@
+---
+status: accepted
+date: 2026-05-29
+cites: PragProg, XP, APoSD, PoEAA
+---
+
+# 0011 — RDS Postgres engine parity + public-IP-allowlist as a throwaway-lab posture
+
+Phase 11 provisions a managed Postgres in a Whizlabs sandbox via a handwritten Terraform module (`code/terraform/rds/`) and points the **local** `mvn spring-boot:run` at it. There is no new application code: `application.yml` already resolves `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` through `${VAR:default}` substitution (introduced in Phase 10), so "talk to a cloud DB" is an env-var change, not a config fork. **PragProg DRY** — one config strategy spanning localhost, container, and cloud; no `application-cloud.yml` to drift.
+
+The engine is **Postgres 16**, the same major the local `docker-compose` runs. The point of this phase is to prove the *deploy target* works, not to discover engine-incompatibility surprises. Matching the local major means Flyway runs the identical four-schema migration set against RDS that it runs locally — no schema divergence, no "works on my machine" gap between dev and cloud. The instance is `db.t4g.micro` / 20 GB GP3: the cheapest Graviton burstable, sized for a demo, not a benchmark. **XP YAGNI** — Multi-AZ, read replicas, Performance Insights, and right-sizing are all deferred until there is a workload that asks for them.
+
+The deliberately uncomfortable decision is `publicly_accessible = true` with the security group allowing `5432` **only** from the developer's `/32`. A public database is something you would never ship to production, and the ADR says so out loud. It is acceptable here for exactly one reason: the lab is **ephemeral (4 hours) and holds no real data**, and the alternative — a bastion host or VPN into the sandbox — is a pile of incidental infrastructure that the lab clock does not justify. The `/32` allowlist is the floor of **PoEAA defence-in-depth** applied to a throwaway: the surface is open to the internet on paper but reachable only from one IP in practice. Crucially, this is a **temporary posture with a scheduled reversal**: Phase 12 sets `publicly_accessible = false` and moves ingress behind the EC2 security group, and *proves* the flip by showing `psql` from the laptop then times out. Writing the throwaway choice into an ADR — rather than leaving it as an un-remarked Terraform flag — is what keeps it from silently surviving into a phase where it would be dangerous.
+
+`skip_final_snapshot = true`, `backup_retention_period = 0`, `deletion_protection = false`: every guardrail that exists to protect *durable* data is switched off, because there is none and because `terraform destroy` must complete cleanly at the end of every lab session. **PragProg reversibility** — the whole module is designed to be stood up and torn down on a 4-hour cadence; a final snapshot or a 7-day backup window would just be cost and friction with nothing to protect.
+
+The module reuses the sandbox's **default VPC and subnets** via data sources rather than provisioning a network. **XP YAGNI** again: a bespoke VPC is Phase-12-and-beyond concern (it arrives naturally when EC2 + private RDS need a defined topology). The infrastructure is **handwritten HCL, not click-ops in the console** — **APoSD strategic programming + PragProg "keep it under version control"**: the three-file module (`variables.tf`, `main.tf`, `outputs.tf`) is readable end-to-end, reproducible across lab sessions, and diffable, where a console-built DB is none of those.
+
+Cost: a running `db.t4g.micro` bills against the Whizlabs lab budget for as long as it is up — mitigated by `terraform destroy` being part of the phase's definition of done. Reversibility: total. Removing `code/terraform/rds/` has zero impact on the local Postgres + Kafka workflow or on `mvn verify`; the cloud DB is an opt-in target selected purely by which env vars are exported.
