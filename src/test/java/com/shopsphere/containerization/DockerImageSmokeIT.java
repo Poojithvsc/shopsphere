@@ -7,13 +7,17 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.images.builder.ImageFromDockerfile;
+import org.testcontainers.utility.DockerImageName;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -73,17 +77,20 @@ class DockerImageSmokeIT {
             .waitingFor(Wait.forLogMessage(".*Kafka Server started.*", 1)
                     .withStartupTimeout(Duration.ofSeconds(60)));
 
+    private static final String IMAGE_TAG = "shopsphere-smoke:latest";
+
     private static GenericContainer<?> app;
 
     @BeforeAll
-    static void buildAndStart() {
+    static void buildAndStart() throws Exception {
         POSTGRES.start();
         KAFKA.start();
 
-        ImageFromDockerfile image = new ImageFromDockerfile("shopsphere-smoke", false)
-                .withFileFromPath(".", Paths.get(".").toAbsolutePath().normalize());
+        buildImage();
 
-        app = new GenericContainer<>(image)
+        // DefaultPullPolicy is local-cache-first: the image we just built is present,
+        // so this never reaches a registry (the tag has no registry counterpart anyway).
+        app = new GenericContainer<>(DockerImageName.parse(IMAGE_TAG))
                 .withNetwork(NETWORK)
                 .withExposedPorts(8080)
                 .withEnv("DB_HOST", "postgres")
@@ -108,6 +115,42 @@ class DockerImageSmokeIT {
         KAFKA.stop();
         POSTGRES.stop();
         NETWORK.close();
+    }
+
+    /**
+     * Builds the production image via the Docker CLI rather than Testcontainers'
+     * {@code ImageFromDockerfile}. The latter builds through the docker-java API, which
+     * only drives Docker's <em>legacy</em> builder — and the legacy builder fails to
+     * export this multi-stage, layered-jar image on the Linux CI runner with
+     * {@code failed to get layer …: layer does not exist} (a known moby bug). The
+     * {@code docker build} CLI uses BuildKit by default, which assembles multi-stage
+     * layers correctly, so the build behaves identically on Windows Docker Desktop and
+     * the GitHub Actions Linux runner. See ADR-0010.
+     */
+    private static void buildImage() throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder("docker", "build", "-t", IMAGE_TAG, ".")
+                .directory(new File("."))
+                .redirectErrorStream(true);
+        pb.environment().put("DOCKER_BUILDKIT", "1");
+
+        Process process = pb.start();
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+
+        if (!process.waitFor(10, TimeUnit.MINUTES)) {
+            process.destroyForcibly();
+            throw new IllegalStateException("docker build timed out after 10 minutes:\n" + output);
+        }
+        int exit = process.exitValue();
+        if (exit != 0) {
+            throw new IllegalStateException("docker build failed (exit " + exit + "):\n" + output);
+        }
     }
 
     @Test
