@@ -2,9 +2,9 @@ spring:
   application:
     name: shopsphere
   datasource:
-    url: jdbc:postgresql://localhost:5432/shopsphere
-    username: shopsphere
-    password: shopsphere
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:shopsphere}
+    username: ${DB_USER:shopsphere}
+    password: ${DB_PASSWORD:shopsphere}
   jpa:
     open-in-view: false
     hibernate:
