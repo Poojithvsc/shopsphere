@@ -1,20 +1,9 @@
 # Local-development stack for ShopSphere.
 #
-# Two ways to run:
-#
-#   # Dev — fast inner loop, JVM on host
-#   docker compose up -d                              # Postgres + Kafka only
-#   mvn spring-boot:run                               # app on the host
-#
-#   # Prod-parity — everything containerised
-#   docker compose --profile full up -d --build      # Postgres + Kafka + app
-#
+#   docker compose up -d        # start Postgres + Kafka
+#   mvn spring-boot:run         # run the app on the host against this stack
 #   docker compose down         # stop (keeps the pg volume)
 #   docker compose down -v      # stop and wipe the database
-#
-# The `app` service is gated behind the `full` profile so the dev workflow is
-# unchanged — `docker compose up -d` continues to bring up only the backing
-# services Postgres + Kafka, exactly as it did before Phase 10.
 #
 # Image versions are pinned to match the Testcontainers setup in
 # src/test/java/com/shopsphere/SharedContainers.java so local runs and CI
@@ -68,29 +57,6 @@ services:
       interval: 10s
       timeout: 10s
       retries: 15
-
-  app:
-    # Only started with `docker compose --profile full up -d --build`.
-    profiles: ["full"]
-    build:
-      context: .
-    container_name: shopsphere-app
-    image: shopsphere:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_NAME: shopsphere
-      DB_USER: shopsphere
-      DB_PASSWORD: shopsphere
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      JWT_SECRET: dev-only-secret-change-me-32-bytes-minimum-aaaa
-    ports:
-      - "8080:8080"
 
 volumes:
   shopsphere-pgdata:
