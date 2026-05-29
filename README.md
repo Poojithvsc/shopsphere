@@ -100,11 +100,12 @@ See `docs/adr/` (ADR-0001 … ADR-0010) and the ubiquitous-language glossary in 
 
 ## Branching & commits
 
-- `main` — protected, release-ready; tagged for releases.
-- `dev` — integration branch; default PR target.
-- `feature/<slug>`, `fix/<slug>`, `chore/<slug>`, `docs/<slug>` — short-lived, off `dev`, merged via PR.
+Two branches, that's it:
 
-Slices squash-merge into `dev` (one commit per phase); `dev → main` releases use a **merge commit**, not squash. Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `build:`, `ci:`.
+- `main` — protected, release-ready; tagged for releases.
+- `dev` — integration branch; **slice work commits directly here**.
+
+No `feature/*`, `fix/*`, `chore/*`, or `docs/*` branches. Slices land as one or more conventional-commit-style commits on `dev` (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `build:`, `ci:`). At the end of an iteration, a single `dev → main` PR carries `Closes #N` for every issue the iteration shipped, and merges with a **merge commit** (not squash) to preserve per-slice history on `main`.
 
 ## Status
 
