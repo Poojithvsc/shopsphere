@@ -48,20 +48,27 @@ class DockerImageSmokeIT {
             .withUsername("shopsphere")
             .withPassword("shopsphere");
 
+    // Listener topology mirrors docker-compose.yml verbatim — proven config. The
+    // single-listener variant (only PLAINTEXT://kafka:9092) passed on Docker Desktop
+    // for Windows but failed on the Linux GitHub Actions runner: the cp-kafka image's
+    // entrypoint appears to override the advertised listener with localhost:<mapped>
+    // when only one PLAINTEXT listener is declared. Replicating compose's dual
+    // PLAINTEXT + PLAINTEXT_HOST shape side-steps that auto-detection entirely.
     private static final GenericContainer<?> KAFKA = new GenericContainer<>("confluentinc/cp-kafka:7.6.1")
             .withNetwork(NETWORK)
             .withNetworkAliases("kafka")
             .withEnv("KAFKA_NODE_ID", "1")
             .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
-            .withEnv("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@kafka:9094")
+            .withEnv("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@kafka:9093")
             .withEnv("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
             .withEnv("KAFKA_INTER_BROKER_LISTENER_NAME", "PLAINTEXT")
-            .withEnv("KAFKA_LISTENERS", "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9094")
-            .withEnv("KAFKA_ADVERTISED_LISTENERS", "PLAINTEXT://kafka:9092")
-            .withEnv("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT")
+            .withEnv("KAFKA_LISTENERS", "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9092")
+            .withEnv("KAFKA_ADVERTISED_LISTENERS", "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092")
+            .withEnv("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT")
             .withEnv("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR", "1")
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
             .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
+            .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "0")
             .withEnv("CLUSTER_ID", "MkU3OEVBNTcwNTJENDM2Qk")
             .waitingFor(Wait.forLogMessage(".*Kafka Server started.*", 1)
                     .withStartupTimeout(Duration.ofSeconds(60)));
@@ -84,7 +91,7 @@ class DockerImageSmokeIT {
                 .withEnv("DB_NAME", "shopsphere")
                 .withEnv("DB_USER", "shopsphere")
                 .withEnv("DB_PASSWORD", "shopsphere")
-                .withEnv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+                .withEnv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
                 .withEnv("JWT_SECRET", "dev-only-secret-change-me-32-bytes-minimum-aaaa")
                 .waitingFor(Wait.forHttp("/actuator/health")
                         .forStatusCode(200)
