@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,9 +30,13 @@ class OrderController {
     }
 
     @PostMapping
-    ResponseEntity<PlacedOrderResponse> place(@Valid @RequestBody PlaceOrderRequest request) {
+    ResponseEntity<PlacedOrderResponse> place(
+            @Valid @RequestBody PlaceOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        // A blank header is treated as absent — only a real key opts into dedupe.
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey;
         CheckoutService.PlacedOrder placed = checkout.checkout(
-                currentCustomerId(), request.shippingAddress(), request.cardNumber());
+                currentCustomerId(), request.shippingAddress(), request.cardNumber(), key);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(new PlacedOrderResponse(placed.orderId(), placed.status()));
     }
@@ -61,6 +66,13 @@ class OrderController {
     @ExceptionHandler(CheckoutService.OrderNotFoundException.class)
     ResponseEntity<Void> orderNotFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    @ExceptionHandler(CheckoutService.IdempotencyConflictException.class)
+    ResponseEntity<ApiError> idempotencyConflict() {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ApiError("idempotency_key_reuse",
+                        "Idempotency-Key already used with a different request payload"));
     }
 
     private static UUID currentCustomerId() {
@@ -93,5 +105,8 @@ class OrderController {
     }
 
     record OrderLineResponse(UUID productId, String name, Money unitPrice, int qty, Money lineTotal) {
+    }
+
+    record ApiError(String error, String message) {
     }
 }

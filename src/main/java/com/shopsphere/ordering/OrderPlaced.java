@@ -15,7 +15,7 @@ public record OrderPlaced(
         UUID orderId,
         UUID customerId,
         Money total,
-        String cardNumber,
+        UUID paymentMethodToken,
         List<Line> lines) {
 
     public static final String EVENT_TYPE = "OrderPlaced";
@@ -25,9 +25,9 @@ public record OrderPlaced(
                        UUID orderId,
                        UUID customerId,
                        Money total,
-                       String cardNumber,
+                       UUID paymentMethodToken,
                        List<Line> lines) {
-        this(EVENT_TYPE, eventId, occurredAt, orderId, customerId, total, cardNumber, lines);
+        this(EVENT_TYPE, eventId, occurredAt, orderId, customerId, total, paymentMethodToken, lines);
     }
 
     public record Line(UUID productId, String name, Money unitPrice, int qty) {

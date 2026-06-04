@@ -26,6 +26,7 @@ class PaymentOrderingConsumer {
 
     private final ObjectMapper mapper;
     private final PaymentSimulator simulator;
+    private final PaymentMethods paymentMethods;
     private final ProcessedEvents processedEvents;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -33,12 +34,14 @@ class PaymentOrderingConsumer {
 
     PaymentOrderingConsumer(ObjectMapper mapper,
                             PaymentSimulator simulator,
+                            PaymentMethods paymentMethods,
                             JdbcTemplate jdbc,
                             ApplicationEventPublisher events,
                             Clock clock,
                             MeterRegistry meters) {
         this.mapper = mapper;
         this.simulator = simulator;
+        this.paymentMethods = paymentMethods;
         this.processedEvents = new ProcessedEvents(jdbc, "payment");
         this.events = events;
         this.clock = clock;
@@ -62,7 +65,11 @@ class PaymentOrderingConsumer {
     }
 
     void process(OrderPlacedView placed) {
-        PaymentSimulator.PaymentOutcome outcome = simulator.process(placed.cardNumber, placed.total);
+        // The PAN is redacted upstream: resolve the token to its last-four and decide from that.
+        String lastFour = paymentMethods.lookup(placed.paymentMethodToken)
+                .map(PaymentMethods.PaymentMethodView::lastFour)
+                .orElse("");
+        PaymentSimulator.PaymentOutcome outcome = simulator.process(lastFour, placed.total);
         String metricOutcome = switch (outcome) {
             case PaymentSimulator.PaymentOutcome.Succeeded s -> {
                 events.publishEvent(new PaymentSucceeded(
@@ -94,16 +101,13 @@ class PaymentOrderingConsumer {
             UUID orderId,
             UUID customerId,
             Money total,
-            String cardNumber) {
+            UUID paymentMethodToken) {
 
         static final String EVENT_TYPE = "OrderPlaced";
 
         OrderPlacedView {
             if (total == null) {
                 total = Money.zero("INR");
-            }
-            if (cardNumber == null) {
-                cardNumber = "";
             }
         }
     }
