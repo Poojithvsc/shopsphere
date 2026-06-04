@@ -65,14 +65,11 @@ class PaymentOrderingConsumer {
     }
 
     void process(OrderPlacedView placed) {
-        // Tolerant of either field while Ordering migrates from cardNumber to paymentMethodToken:
-        // prefer the token (resolve its redacted last-four), fall back to the legacy raw card.
-        String cardOrLastFour = placed.paymentMethodToken != null
-                ? paymentMethods.lookup(placed.paymentMethodToken)
-                        .map(PaymentMethods.PaymentMethodView::lastFour)
-                        .orElse("")
-                : placed.cardNumber;
-        PaymentSimulator.PaymentOutcome outcome = simulator.process(cardOrLastFour, placed.total);
+        // The PAN is redacted upstream: resolve the token to its last-four and decide from that.
+        String lastFour = paymentMethods.lookup(placed.paymentMethodToken)
+                .map(PaymentMethods.PaymentMethodView::lastFour)
+                .orElse("");
+        PaymentSimulator.PaymentOutcome outcome = simulator.process(lastFour, placed.total);
         String metricOutcome = switch (outcome) {
             case PaymentSimulator.PaymentOutcome.Succeeded s -> {
                 events.publishEvent(new PaymentSucceeded(
@@ -104,17 +101,13 @@ class PaymentOrderingConsumer {
             UUID orderId,
             UUID customerId,
             Money total,
-            UUID paymentMethodToken,
-            String cardNumber) {
+            UUID paymentMethodToken) {
 
         static final String EVENT_TYPE = "OrderPlaced";
 
         OrderPlacedView {
             if (total == null) {
                 total = Money.zero("INR");
-            }
-            if (cardNumber == null) {
-                cardNumber = "";
             }
         }
     }
