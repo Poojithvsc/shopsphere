@@ -3,6 +3,7 @@ package com.shopsphere.ordering;
 import com.shopsphere.catalog.Catalog;
 import com.shopsphere.catalog.ProductPriceLookup;
 import com.shopsphere.common.Money;
+import com.shopsphere.payment.PaymentMethods;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
@@ -28,6 +29,7 @@ class CheckoutService {
     private final OrderRepository orders;
     private final Catalog catalog;
     private final ProductPriceLookup catalogPrices;
+    private final PaymentMethods paymentMethods;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final MeterRegistry meters;
@@ -36,6 +38,7 @@ class CheckoutService {
                     OrderRepository orders,
                     Catalog catalog,
                     ProductPriceLookup catalogPrices,
+                    PaymentMethods paymentMethods,
                     ApplicationEventPublisher events,
                     Clock clock,
                     MeterRegistry meters) {
@@ -43,6 +46,7 @@ class CheckoutService {
         this.orders = orders;
         this.catalog = catalog;
         this.catalogPrices = catalogPrices;
+        this.paymentMethods = paymentMethods;
         this.events = events;
         this.clock = clock;
         this.meters = meters;
@@ -106,13 +110,17 @@ class CheckoutService {
 
         cart.clearItems(now);
 
+        // Redact the PAN at the context boundary: the raw card is exchanged for an opaque token and
+        // never reaches the event, the log, or the ordering schema.
+        UUID paymentMethodToken = paymentMethods.tokenize(cardNumber);
+
         OrderPlaced placed = new OrderPlaced(
                 UUID.randomUUID(),
                 now,
                 order.getId(),
                 customerId,
                 runningTotal,
-                cardNumber,
+                paymentMethodToken,
                 List.copyOf(eventLines));
         events.publishEvent(placed);
 
