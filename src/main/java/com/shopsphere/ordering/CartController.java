@@ -2,6 +2,7 @@ package com.shopsphere.ordering;
 
 import com.shopsphere.common.Money;
 import com.shopsphere.identity.AuthenticatedPrincipal;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/cart")
+@SecurityRequirement(name = "bearerAuth")
 class CartController {
 
     private final CartService carts;
