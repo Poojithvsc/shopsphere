@@ -27,6 +27,7 @@ class PaymentMetricsTests {
     private final PaymentOrderingConsumer consumer = new PaymentOrderingConsumer(
             new ObjectMapper(),
             new PaymentSimulator(),
+            mock(PaymentMethods.class),
             mock(JdbcTemplate.class),
             event -> { },
             Clock.systemUTC(),
@@ -34,29 +35,31 @@ class PaymentMetricsTests {
 
     @Test
     void successCardCountsAsSucceeded() {
-        consumer.process(placedWith(PaymentSimulator.CARD_SUCCESS));
+        consumer.process(placedWith(PaymentSimulator.LAST_FOUR_SUCCESS));
         assertThat(meters.counter("payments_total", "outcome", "succeeded").count()).isEqualTo(1.0);
     }
 
     @Test
     void declinedCardCountsAsDeclined() {
-        consumer.process(placedWith(PaymentSimulator.CARD_DECLINED));
+        consumer.process(placedWith("0002"));
         assertThat(meters.counter("payments_total", "outcome", "declined").count()).isEqualTo(1.0);
     }
 
     @Test
     void insufficientFundsCardCountsAsInsufficientFunds() {
-        consumer.process(placedWith(PaymentSimulator.CARD_INSUFFICIENT_FUNDS));
+        consumer.process(placedWith(PaymentSimulator.LAST_FOUR_INSUFFICIENT_FUNDS));
         assertThat(meters.counter("payments_total", "outcome", "insufficient_funds").count()).isEqualTo(1.0);
     }
 
     private PaymentOrderingConsumer.OrderPlacedView placedWith(String card) {
+        // Legacy raw-card path (paymentMethodToken = null) — the simulator reduces it to last-four.
         return new PaymentOrderingConsumer.OrderPlacedView(
                 PaymentOrderingConsumer.OrderPlacedView.EVENT_TYPE,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 Money.of(new BigDecimal("100.0000"), "INR"),
+                null,
                 card);
     }
 }

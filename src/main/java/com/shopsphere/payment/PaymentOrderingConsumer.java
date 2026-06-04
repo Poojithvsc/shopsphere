@@ -26,6 +26,7 @@ class PaymentOrderingConsumer {
 
     private final ObjectMapper mapper;
     private final PaymentSimulator simulator;
+    private final PaymentMethods paymentMethods;
     private final ProcessedEvents processedEvents;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -33,12 +34,14 @@ class PaymentOrderingConsumer {
 
     PaymentOrderingConsumer(ObjectMapper mapper,
                             PaymentSimulator simulator,
+                            PaymentMethods paymentMethods,
                             JdbcTemplate jdbc,
                             ApplicationEventPublisher events,
                             Clock clock,
                             MeterRegistry meters) {
         this.mapper = mapper;
         this.simulator = simulator;
+        this.paymentMethods = paymentMethods;
         this.processedEvents = new ProcessedEvents(jdbc, "payment");
         this.events = events;
         this.clock = clock;
@@ -62,7 +65,14 @@ class PaymentOrderingConsumer {
     }
 
     void process(OrderPlacedView placed) {
-        PaymentSimulator.PaymentOutcome outcome = simulator.process(placed.cardNumber, placed.total);
+        // Tolerant of either field while Ordering migrates from cardNumber to paymentMethodToken:
+        // prefer the token (resolve its redacted last-four), fall back to the legacy raw card.
+        String cardOrLastFour = placed.paymentMethodToken != null
+                ? paymentMethods.lookup(placed.paymentMethodToken)
+                        .map(PaymentMethods.PaymentMethodView::lastFour)
+                        .orElse("")
+                : placed.cardNumber;
+        PaymentSimulator.PaymentOutcome outcome = simulator.process(cardOrLastFour, placed.total);
         String metricOutcome = switch (outcome) {
             case PaymentSimulator.PaymentOutcome.Succeeded s -> {
                 events.publishEvent(new PaymentSucceeded(
@@ -94,6 +104,7 @@ class PaymentOrderingConsumer {
             UUID orderId,
             UUID customerId,
             Money total,
+            UUID paymentMethodToken,
             String cardNumber) {
 
         static final String EVENT_TYPE = "OrderPlaced";
