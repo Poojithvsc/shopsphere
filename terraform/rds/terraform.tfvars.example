@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored) and fill in before `terraform apply`.
+# Find your public /32 with: curl -s https://checkip.amazonaws.com
+
+my_ip_cidr  = "203.0.113.4/32"
+db_password = "set-a-strong-password-in-your-lab-session"
+
+# Override only if your Whizlabs sandbox is not in us-east-1:
+# aws_region = "us-west-2"

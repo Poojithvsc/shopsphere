@@ -118,7 +118,7 @@ If startup fails on `SchemaManagementException: Schema-validation`, you've got m
 In the second terminal:
 
 ```powershell
-curl http://localhost:8080/actuator/health
+curl.exe http://localhost:8080/actuator/health
 ```
 
 Expected JSON contains `"status":"UP"` plus `"db":{...,"status":"UP"}` and **`"kafka":{...,"status":"UP","details":{"nodeCount":1}}`**. The Kafka entry is the project's custom `KafkaHealthIndicator` — if Kafka were down or unreachable, this would show `DOWN` even though the app itself starts.
