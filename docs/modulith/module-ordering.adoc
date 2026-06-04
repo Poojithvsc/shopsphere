@@ -5,4 +5,5 @@
 |Bean references
 |* `c.s.c.ProductPriceLookup` (in Catalog)
 * `c.s.c.Catalog` (in Catalog)
+* `c.s.p.PaymentMethods` (in Payment)
 |===

@@ -5,6 +5,10 @@ plantuml::components.puml[]
 plantuml::module-common.puml[]
 include::module-common.adoc[]
 
+== Payment
+plantuml::module-payment.puml[]
+include::module-payment.adoc[]
+
 == Catalog
 plantuml::module-catalog.puml[]
 include::module-catalog.adoc[]
@@ -12,10 +16,6 @@ include::module-catalog.adoc[]
 == Identity
 plantuml::module-identity.puml[]
 include::module-identity.adoc[]
-
-== Payment
-plantuml::module-payment.puml[]
-include::module-payment.adoc[]
 
 == Ordering
 plantuml::module-ordering.puml[]
