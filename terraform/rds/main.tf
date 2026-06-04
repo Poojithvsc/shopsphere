@@ -40,11 +40,11 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "rds" {
   name        = "${var.name_prefix}-rds"
-  description = "ShopSphere RDS — Postgres 5432 from the developer laptop only"
+  description = "ShopSphere RDS - Postgres 5432 from the developer laptop only"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "Postgres from the developer's public /32"
+    description = "Postgres from the developer public /32"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
