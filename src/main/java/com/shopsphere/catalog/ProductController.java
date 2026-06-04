@@ -1,5 +1,6 @@
 package com.shopsphere.catalog;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/products")
+@SecurityRequirement(name = "bearerAuth")
 class ProductController {
 
     private final ProductRepository products;

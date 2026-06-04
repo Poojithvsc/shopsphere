@@ -33,6 +33,12 @@ public final class SharedContainers {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+        // Spring caches one context (hence one Hikari pool) per distinct test configuration, and a
+        // RANDOM_PORT IT is its own configuration. Several cached pools at the default size of 10
+        // each exhaust Postgres's default max_connections (100) — failing late ITs with
+        // "sorry, too many clients already". Tests don't need a deep pool, so cap it small.
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> "4");
+        registry.add("spring.datasource.hikari.minimum-idle", () -> "0");
     }
 
     public static String kafkaBootstrap() {
