@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) and adjust before a real apply.
+# S3 bucket names are globally unique — pick something nobody else has taken.
+aws_region  = "us-east-1"
+bucket_name = "shopsphere-product-images-CHANGEME"
