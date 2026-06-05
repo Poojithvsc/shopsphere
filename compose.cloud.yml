@@ -1,0 +1,84 @@
+# ShopSphere — cloud deploy compose (Phase 12 + Phase 20).
+#
+# This runs ON the EC2 instance (written there by Terraform user-data), NOT on your laptop. It differs
+# from the local docker-compose.yml in three deliberate ways:
+#   1. No `postgres` — the app connects to the PRIVATE RDS (DB_HOST is the RDS endpoint, injected via .env).
+#   2. No `localstack` — S3 image storage is dormant in the lab (S3_ENDPOINT blank → real-S3 resolution,
+#      never called by the core QA flow). Real-S3 wiring is deferred to own-AWS (ADR-0016).
+#   3. `app` is pulled from Docker Hub (APP_IMAGE), not built — the EC2 has no source tree.
+#
+# All ${...} below are docker-compose env interpolation, resolved from /opt/shopsphere/.env on the EC2.
+#
+# Bring up (Phase 12):           docker compose -f compose.cloud.yml up -d
+# Bring up with HTTPS (Phase 20): docker compose -f compose.cloud.yml --profile caddy up -d
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: shopsphere-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Only the in-cluster PLAINTEXT listener is needed — nothing off the EC2 talks to Kafka directly.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  app:
+    image: ${APP_IMAGE:-poojithvsc/shopsphere:latest}
+    container_name: shopsphere-app
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-shopsphere}
+      DB_USER: ${DB_USER:-shopsphere}
+      DB_PASSWORD: ${DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET}
+      # S3 dormant: blank endpoint → SDK uses real-S3 resolution; the core QA flow never calls it.
+      S3_ENDPOINT: ""
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    ports:
+      # Direct HTTP (Phase 12). Caddy (Phase 20) also fronts this on 443.
+      - "8080:8080"
+    restart: unless-stopped
+
+  caddy:
+    # Phase 20 — HTTPS termination with a self-signed cert (`tls internal`), reverse-proxying to the
+    # app. Only started under the `caddy` profile (Terraform user-data passes --profile caddy when
+    # enable_https=true). Whizlabs ephemeral IPs preclude Let's Encrypt, so self-signed is the choice.
+    profiles: ["caddy"]
+    image: caddy:2.8
+    container_name: shopsphere-caddy
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      # user-data sets PUBLIC_IP in .env (read from IMDS) so Caddy mints an internal cert with the
+      # instance's IP in the SAN. Falls back to localhost if somehow unset.
+      CADDY_SITE_ADDRESS: ${PUBLIC_IP:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    ports:
+      - "443:443"
+    restart: unless-stopped
+
+volumes:
+  caddy-data:

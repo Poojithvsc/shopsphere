@@ -1,0 +1,54 @@
+#!/bin/bash
+# ShopSphere EC2 bootstrap (Phase 12 + Phase 20). Rendered by Terraform `templatefile`: the
+# dollar-brace placeholders below are TERRAFORM template variables, not shell variables. This script
+# deliberately avoids shell variables with braces so it needs no escaping (bare $TOKEN/$PUBIP are
+# fine; templatefile only touches the brace form). Logs to /var/log/cloud-init-output.log.
+set -euxo pipefail
+
+# --- Docker + compose plugin (Amazon Linux 2023) ---
+dnf install -y docker
+systemctl enable --now docker
+usermod -aG docker ec2-user
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# --- App working dir ---
+mkdir -p /opt/shopsphere
+cd /opt/shopsphere
+
+# --- Environment for docker compose interpolation (.env is read automatically) ---
+# These are real values substituted by Terraform at apply time; the app reads them via compose.
+cat > /opt/shopsphere/.env <<'ENVEOF'
+APP_IMAGE=${image}
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_USER=${db_user}
+DB_PASSWORD=${db_password}
+JWT_SECRET=${jwt_secret}
+AWS_REGION=${aws_region}
+ENVEOF
+
+# Discover this instance's public IP from IMDSv2 and append it so Caddy mints a cert with the IP in
+# the SAN (browsers don't send SNI for bare-IP URLs, so the cert must carry the IP). Done at runtime
+# rather than templated to avoid the launch-time chicken-and-egg with the public IP.
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PUBIP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "PUBLIC_IP=$PUBIP" >> /opt/shopsphere/.env
+chmod 600 /opt/shopsphere/.env
+
+# --- compose.cloud.yml (verbatim copy of the repo file, baked in so the box matches version control) ---
+cat > /opt/shopsphere/compose.cloud.yml <<'COMPOSEEOF'
+${compose_cloud}
+COMPOSEEOF
+
+# --- Caddyfile (used only when HTTPS is enabled) ---
+cat > /opt/shopsphere/Caddyfile <<'CADDYEOF'
+${caddyfile}
+CADDYEOF
+
+# --- Bring up the stack ---
+docker compose -f compose.cloud.yml pull
+docker compose -f compose.cloud.yml %{ if enable_https }--profile caddy %{ endif }up -d
