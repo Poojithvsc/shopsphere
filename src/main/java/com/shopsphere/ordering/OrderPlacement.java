@@ -3,10 +3,10 @@ package com.shopsphere.ordering;
 import com.shopsphere.catalog.Catalog;
 import com.shopsphere.catalog.ProductPriceLookup;
 import com.shopsphere.common.Money;
+import com.shopsphere.common.OrderLog;
 import com.shopsphere.payment.PaymentMethods;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -120,16 +120,13 @@ class OrderPlacement {
                 List.copyOf(eventLines));
         events.publishEvent(placed);
 
-        // Structured, contextual log line — orderId/customerId land as top-level JSON fields via MDC.
-        MDC.put("orderId", order.getId().toString());
-        MDC.put("customerId", customerId.toString());
-        try {
-            log.info("Order placed with {} line(s), total {} {}",
-                    eventLines.size(), runningTotal.amount(), runningTotal.currency());
-        } finally {
-            MDC.remove("orderId");
-            MDC.remove("customerId");
-        }
+        // Structured, contextual log line — orderId/customerId land as top-level JSON fields via MDC,
+        // so a Loki orderId query picks this up as Ordering's leg of the order's journey (emitted in
+        // the same transaction as the outbox insert above).
+        Money total = runningTotal;
+        OrderLog.withOrder(order.getId(), customerId, () ->
+                log.info("Order placed with {} line(s), total {} {}",
+                        eventLines.size(), total.amount(), total.currency()));
 
         return new CheckoutService.PlacedOrder(order.getId(), order.getStatus());
     }

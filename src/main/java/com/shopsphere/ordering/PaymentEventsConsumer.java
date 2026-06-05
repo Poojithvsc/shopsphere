@@ -2,6 +2,7 @@ package com.shopsphere.ordering;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shopsphere.common.OrderLog;
 import com.shopsphere.common.ProcessedEvents;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -62,11 +63,13 @@ class PaymentEventsConsumer {
             case "PaymentSucceeded" -> {
                 order.transitionTo(OrderStatus.PAID, now);
                 events.publishEvent(new OrderPaid(UUID.randomUUID(), now, orderId, customerId));
+                OrderLog.withOrder(orderId, customerId, () -> log.info("Order marked PAID"));
             }
             case "PaymentFailed" -> {
                 String reason = textOrNull(tree, "reason");
                 order.transitionTo(OrderStatus.CANCELLED, now);
                 events.publishEvent(new OrderCancelled(UUID.randomUUID(), now, orderId, customerId, reason));
+                OrderLog.withOrder(orderId, customerId, () -> log.info("Order CANCELLED: {}", reason));
             }
             default -> log.warn("Unknown payment event type: {}", eventType);
         }

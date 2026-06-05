@@ -1,6 +1,9 @@
 package com.shopsphere.catalog;
 
+import com.shopsphere.common.OrderLog;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +16,8 @@ import java.util.UUID;
 
 @Service
 class CatalogImpl implements Catalog {
+
+    private static final Logger log = LoggerFactory.getLogger(CatalogImpl.class);
 
     static final String PRODUCT_NOT_FOUND = "PRODUCT_NOT_FOUND";
     static final String INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK";
@@ -67,6 +72,12 @@ class CatalogImpl implements Catalog {
             countReservations("held", decisions.size());
         }
 
+        // Reservation's leg of the order's journey — stamped with orderId so a Loki orderId query
+        // returns the stock decision alongside Ordering's and Payment's lines.
+        boolean granted = allGranted;
+        OrderLog.withOrder(orderId, () ->
+                log.info("Reservation {} for {} item(s)", granted ? "granted" : "denied", decisions.size()));
+
         List<ReservationLine> lines = decisions.stream()
                 .map(Decision::toLine)
                 .toList();
@@ -81,6 +92,7 @@ class CatalogImpl implements Catalog {
             r.confirm();
         }
         countReservations("confirmed", held.size());
+        OrderLog.withOrder(orderId, () -> log.info("Reservation confirmed for {} item(s)", held.size()));
     }
 
     @Override
@@ -94,6 +106,7 @@ class CatalogImpl implements Catalog {
             r.release();
         }
         countReservations("released", held.size());
+        OrderLog.withOrder(orderId, () -> log.info("Reservation released for {} item(s)", held.size()));
     }
 
     @Override
