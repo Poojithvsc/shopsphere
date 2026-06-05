@@ -125,5 +125,34 @@ services:
     ports:
       - "8080:8080"
 
+  prometheus:
+    # Observability stack — only with the `full` profile (it scrapes the containerised app).
+    profiles: ["full"]
+    image: prom/prometheus:v2.54.1
+    container_name: shopsphere-prometheus
+    depends_on:
+      app:
+        condition: service_started
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    profiles: ["full"]
+    image: grafana/grafana:11.2.0
+    container_name: shopsphere-grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    environment:
+      # Default admin/admin. GF_SECURITY_ADMIN_PASSWORD is intentionally NOT set so Grafana keeps
+      # its built-in "change password on first login" prompt (the AC). Rotate before any real use.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+
 volumes:
   shopsphere-pgdata:
