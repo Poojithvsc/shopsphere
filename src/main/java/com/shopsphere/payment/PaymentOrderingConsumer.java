@@ -25,23 +25,20 @@ class PaymentOrderingConsumer {
     static final String CONSUMER_ID = "payment.orderplaced";
 
     private final ObjectMapper mapper;
-    private final PaymentSimulator simulator;
-    private final PaymentMethods paymentMethods;
+    private final PaymentProvider provider;
     private final ProcessedEvents processedEvents;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final MeterRegistry meters;
 
     PaymentOrderingConsumer(ObjectMapper mapper,
-                            PaymentSimulator simulator,
-                            PaymentMethods paymentMethods,
+                            PaymentProvider provider,
                             JdbcTemplate jdbc,
                             ApplicationEventPublisher events,
                             Clock clock,
                             MeterRegistry meters) {
         this.mapper = mapper;
-        this.simulator = simulator;
-        this.paymentMethods = paymentMethods;
+        this.provider = provider;
         this.processedEvents = new ProcessedEvents(jdbc, "payment");
         this.events = events;
         this.clock = clock;
@@ -65,18 +62,16 @@ class PaymentOrderingConsumer {
     }
 
     void process(OrderPlacedView placed) {
-        // The PAN is redacted upstream: resolve the token to its last-four and decide from that.
-        String lastFour = paymentMethods.lookup(placed.paymentMethodToken)
-                .map(PaymentMethods.PaymentMethodView::lastFour)
-                .orElse("");
-        PaymentSimulator.PaymentOutcome outcome = simulator.process(lastFour, placed.total);
+        // Hand the tokenized instrument to the configured provider; the PAN never reaches here. The
+        // provider (simulator or Stripe Test Mode) owns how a token becomes an approve/decline.
+        PaymentProvider.ChargeOutcome outcome = provider.charge(placed.paymentMethodToken, placed.total);
         String metricOutcome = switch (outcome) {
-            case PaymentSimulator.PaymentOutcome.Succeeded s -> {
+            case PaymentProvider.ChargeOutcome.Succeeded s -> {
                 events.publishEvent(new PaymentSucceeded(
                         UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, s.amount()));
                 yield "succeeded";
             }
-            case PaymentSimulator.PaymentOutcome.Failed f -> {
+            case PaymentProvider.ChargeOutcome.Failed f -> {
                 events.publishEvent(new PaymentFailed(
                         UUID.randomUUID(), clock.instant(), placed.orderId, placed.customerId, f.reason()));
                 yield f.reason().name().toLowerCase(Locale.ROOT);

@@ -31,8 +31,7 @@ class PaymentMetricsTests {
     private final PaymentMethods paymentMethods = mock(PaymentMethods.class);
     private final PaymentOrderingConsumer consumer = new PaymentOrderingConsumer(
             new ObjectMapper(),
-            new PaymentSimulator(),
-            paymentMethods,
+            new SimulatedProvider(paymentMethods, new PaymentSimulator()),
             mock(JdbcTemplate.class),
             event -> { },
             Clock.systemUTC(),

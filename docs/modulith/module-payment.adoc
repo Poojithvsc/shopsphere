@@ -6,4 +6,8 @@
 |_Services_
 
 * `c.s.p.PaymentMethods` (via `c.s.p.PaymentMethodService`)
+
+_Others_
+
+* `c.s.p.PaymentProvider`
 |===
