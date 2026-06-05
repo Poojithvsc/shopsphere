@@ -12,6 +12,12 @@ spring:
     properties:
       hibernate:
         default_schema: catalog
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        # Oversized ?size= requests are clamped to this rather than rejected (see ADR-0017).
+        max-page-size: 100
   flyway:
     enabled: true
     default-schema: catalog

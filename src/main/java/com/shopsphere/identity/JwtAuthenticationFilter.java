@@ -6,12 +6,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
-import java.util.UUID;
 
 final class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -44,9 +46,16 @@ final class JwtAuthenticationFilter extends OncePerRequestFilter {
         private final AuthenticatedPrincipal principal;
 
         JwtAuthentication(JwtIssuer.Verified verified) {
-            super(List.of());
+            super(authorities(verified.roles()));
             this.principal = new AuthenticatedPrincipal(verified.userId(), verified.customerId());
             setAuthenticated(true);
+        }
+
+        private static Collection<GrantedAuthority> authorities(List<String> roles) {
+            // Spring's hasRole('ADMIN') checks for a ROLE_ADMIN authority; map each role name across.
+            return roles.stream()
+                    .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
+                    .toList();
         }
 
         @Override
