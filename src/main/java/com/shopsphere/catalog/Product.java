@@ -31,6 +31,10 @@ class Product {
     @Column(name = "available_qty", nullable = false)
     private int availableQty;
 
+    // S3 key of this product's uploaded image, or null if none (Phase 16). The bytes live in S3.
+    @Column(name = "image_key")
+    private String imageKey;
+
     protected Product() {
     }
 
@@ -66,6 +70,14 @@ class Product {
 
     int getAvailableQty() {
         return availableQty;
+    }
+
+    String getImageKey() {
+        return imageKey;
+    }
+
+    void setImageKey(String imageKey) {
+        this.imageKey = imageKey;
     }
 
     void decreaseAvailable(int amount) {

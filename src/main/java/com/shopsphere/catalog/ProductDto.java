@@ -9,6 +9,7 @@ record ProductDto(
         String name,
         String description,
         Money unitPrice,
-        int availableQty
+        int availableQty,
+        String imageUrl
 ) {
 }

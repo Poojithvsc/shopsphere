@@ -17,9 +17,11 @@ import java.util.UUID;
 class ProductController {
 
     private final ProductRepository products;
+    private final ProductMapper mapper;
 
-    ProductController(ProductRepository products) {
+    ProductController(ProductRepository products, ProductMapper mapper) {
         this.products = products;
+        this.mapper = mapper;
     }
 
     /**
@@ -30,13 +32,13 @@ class ProductController {
      */
     @GetMapping
     PagedResponse<ProductDto> list(@PageableDefault(size = 20, sort = "name") Pageable pageable) {
-        return PagedResponse.of(products.findAll(pageable), ProductMapper::toDto);
+        return PagedResponse.of(products.findAll(pageable), mapper::toDto);
     }
 
     @GetMapping("/{id}")
     ResponseEntity<ProductDto> getOne(@PathVariable UUID id) {
         return products.findById(id)
-                .map(ProductMapper::toDto)
+                .map(mapper::toDto)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }

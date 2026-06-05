@@ -69,6 +69,16 @@ shopsphere:
     ttl: PT15M
   refresh:
     ttl: P7D
+  storage:
+    s3:
+      # The dev↔cloud seam (mirrors the ${DB_HOST} pattern): LocalStack endpoint by default; set
+      # S3_ENDPOINT empty in cloud so the SDK resolves real S3. Credentials are blank here so the
+      # default AWS provider chain (instance profile) is used unless S3_ACCESS_KEY/S3_SECRET_KEY set.
+      endpoint: ${S3_ENDPOINT:http://localhost:4566}
+      bucket: ${S3_BUCKET:shopsphere-product-images}
+      region: ${AWS_REGION:us-east-1}
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
   ordering:
     idempotency:
       # Delete idempotency claims older than this. Must outlast any legitimate client-retry window;
