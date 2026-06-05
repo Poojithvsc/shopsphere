@@ -1,0 +1,23 @@
+# ShopSphere — Phase 20: HTTPS termination in front of the app.
+#
+# `tls internal` makes Caddy mint a self-signed cert from its own local CA — no ACME, because
+# Whizlabs ephemeral public IPs can't pass Let's Encrypt's domain validation (and there's no domain).
+#
+# The site address is taken from $CADDY_SITE_ADDRESS so the SAME file works everywhere:
+#   - local testing: env unset -> defaults to `localhost`, so `curl -k https://localhost` works;
+#   - EC2 in the lab: user-data sets CADDY_SITE_ADDRESS to the instance's public IP (read from IMDS),
+#     so Caddy mints an internal cert with that IP in the SAN and `https://<ec2-public-ip>` works.
+# A bare `:443` (no host) is intentionally NOT used — Caddy then has no name to issue a cert for and
+# the TLS handshake fails. Caddy needs a concrete host/IP in the site address.
+#
+# Expect a browser cert warning — that's the untrusted self-signed CA, acceptable for this iteration.
+# On graduation to own AWS, this proxy is replaced by ACM + ALB (a managed, trusted cert) — ADR-0020.
+
+{
+	auto_https disable_redirects
+}
+
+{$CADDY_SITE_ADDRESS:localhost} {
+	tls internal
+	reverse_proxy app:8080
+}

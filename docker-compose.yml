@@ -199,5 +199,23 @@ services:
     ports:
       - "8081:8080"
 
+  caddy:
+    # Phase 20 — HTTPS reverse proxy in front of the app, self-signed via `tls internal`. Under the
+    # `full` profile so a local `docker compose --profile full up -d` lets you prove TLS works:
+    # `curl -k https://localhost/actuator/health` reaches the app. The same Caddyfile fronts the EC2
+    # in the cloud deploy (compose.cloud.yml). See ADR-0020.
+    profiles: ["full"]
+    image: caddy:2.8
+    container_name: shopsphere-caddy
+    depends_on:
+      app:
+        condition: service_started
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    ports:
+      - "443:443"
+
 volumes:
   shopsphere-pgdata:
+  caddy-data:
