@@ -49,7 +49,7 @@ class AuthService {
         if (!hasher.matches(rawPassword, user.getPasswordHash())) {
             throw new BadCredentialsException();
         }
-        return issueTokens(user.getId(), user.getCustomerId());
+        return issueTokens(user.getId(), user.getCustomerId(), user.getRoles());
     }
 
     @Transactional(noRollbackFor = RefreshTokenService.InvalidRefreshTokenException.class)
@@ -57,7 +57,7 @@ class AuthService {
         RefreshTokenService.Issued issued = refreshTokens.rotate(presentedRefreshToken);
         User user = users.findById(issued.userId())
                 .orElseThrow(RefreshTokenService.InvalidRefreshTokenException::new);
-        String access = jwt.issue(user.getId(), user.getCustomerId());
+        String access = jwt.issue(user.getId(), user.getCustomerId(), user.getRoles());
         return new Token(access, jwt.ttlSeconds(), issued.rawToken(), issued.expiresInSeconds());
     }
 
@@ -66,8 +66,8 @@ class AuthService {
         refreshTokens.revoke(presentedRefreshToken);
     }
 
-    private Token issueTokens(UUID userId, UUID customerId) {
-        String access = jwt.issue(userId, customerId);
+    private Token issueTokens(UUID userId, UUID customerId, java.util.List<String> roles) {
+        String access = jwt.issue(userId, customerId, roles);
         RefreshTokenService.Issued issued = refreshTokens.issueNew(userId);
         return new Token(access, jwt.ttlSeconds(), issued.rawToken(), issued.expiresInSeconds());
     }
