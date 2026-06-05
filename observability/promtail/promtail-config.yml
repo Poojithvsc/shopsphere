@@ -1,0 +1,34 @@
+# Promtail — tails Docker container logs and pushes them to Loki (Phase 18b).
+#
+# It discovers running containers through the Docker engine API (the mounted /var/run/docker.sock),
+# keeps only the ShopSphere app container, and ships each stdout line to Loki verbatim. The app
+# already logs JSON (LogstashEncoder, logback-spring.xml) with orderId/customerId as top-level
+# fields, so we do NOT parse fields into Loki labels — that would explode label cardinality. Instead
+# the raw JSON line is stored and queried with a line filter, e.g.
+#   {container="shopsphere-app"} |= "<orderId>"
+# which returns every module's line for that order (Ordering, Payment, Reservation).
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Keep only the app container; drop the broker, db, grafana, etc.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/shopsphere-app'
+        action: keep
+      # Expose a clean `container` label (strip Docker's leading slash) for the query above.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+        replacement: '$1'

@@ -1,0 +1,41 @@
+# Single-binary Loki for local development (Phase 18b).
+#
+# Everything runs in one process with on-disk (filesystem) storage — no object store, no clustering.
+# That is the right altitude for a dev/QA log backend: zero external dependency, matching the rest of
+# the ShopSphere local stack. Retention and replication are intentionally left at defaults; logs are
+# disposable here and the container's filesystem is wiped on `docker compose down`.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Promtail ships lines as fast as it tails; allow a little burst headroom for a QA walkthrough.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  # Let queries reach back over a full local session.
+  reject_old_samples: false

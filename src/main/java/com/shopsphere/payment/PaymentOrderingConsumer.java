@@ -3,6 +3,7 @@ package com.shopsphere.payment;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shopsphere.common.Money;
+import com.shopsphere.common.OrderLog;
 import com.shopsphere.common.ProcessedEvents;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -79,6 +80,11 @@ class PaymentOrderingConsumer {
         };
         // Counted only here, downstream of the markProcessed dedupe gate — redelivery never re-counts.
         meters.counter("payments_total", "outcome", metricOutcome).increment();
+
+        // Payment's leg of the order's journey — orderId/customerId stamped so a Loki orderId query
+        // returns this line alongside Ordering's and Reservation's.
+        OrderLog.withOrder(placed.orderId, placed.customerId, () ->
+                log.info("Charge {} for order", metricOutcome));
     }
 
     private static String textOrNull(JsonNode tree, String field) {

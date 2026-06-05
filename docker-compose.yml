@@ -154,5 +154,50 @@ services:
     ports:
       - "3000:3000"
 
+  loki:
+    # Log aggregation — single-binary, filesystem storage (Phase 18b). Grafana queries it as a
+    # second data source; promtail (below) feeds it. `full` profile because it stores the
+    # containerised app's logs, like the rest of the observability stack.
+    profiles: ["full"]
+    image: grafana/loki:3.1.1
+    container_name: shopsphere-loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports:
+      - "3100:3100"
+
+  promtail:
+    # Tails the app container's stdout JSON logs and ships them to Loki (Phase 18b). Reads the
+    # Docker socket to discover the `shopsphere-app` container; no app code or logging change needed.
+    profiles: ["full"]
+    image: grafana/promtail:3.1.1
+    container_name: shopsphere-promtail
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    depends_on:
+      loki:
+        condition: service_started
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Promtail discovers containers and reads their JSON logs via the Docker engine API.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  kafka-ui:
+    # Browse topics, partitions, and consumer-group offsets at http://localhost:8081 (Phase 18b).
+    # Needs only the broker, but stays under `full` so `docker compose up -d` keeps the dev loop
+    # minimal (Postgres + Kafka), consistent with how the app and metrics stack are gated.
+    profiles: ["full"]
+    image: kafbat/kafka-ui:v1.0.0
+    container_name: shopsphere-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: shopsphere
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8081:8080"
+
 volumes:
   shopsphere-pgdata:
