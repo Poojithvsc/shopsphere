@@ -3,6 +3,8 @@ package com.shopsphere.ordering;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +41,17 @@ class IdempotencyKeys {
                 (rs, rowNum) -> new PriorRequest(
                         rs.getString("request_hash"), rs.getObject("order_id", UUID.class)),
                 customerId, key).stream().findFirst();
+    }
+
+    /**
+     * Deletes every claim created strictly before {@code cutoff} and returns how many rows went.
+     * Used by the retention sweep ({@link IdempotencyRetention}) to keep the table from growing
+     * unbounded; the cutoff only needs to predate any legitimate client-retry window.
+     */
+    int deleteOlderThan(Instant cutoff) {
+        return jdbc.update(
+                "DELETE FROM ordering.idempotency_keys WHERE created_at < ?",
+                Timestamp.from(cutoff));
     }
 
     record PriorRequest(String requestHash, UUID orderId) {

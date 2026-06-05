@@ -63,3 +63,10 @@ shopsphere:
     ttl: PT15M
   refresh:
     ttl: P7D
+  ordering:
+    idempotency:
+      # Delete idempotency claims older than this. Must outlast any legitimate client-retry window;
+      # 24h is a wide margin over the seconds-to-minutes a real retry takes (#73, ADR-0014).
+      ttl: PT24H
+      # How often the retention sweep runs (fixed delay between completions).
+      sweep-interval: PT1H
