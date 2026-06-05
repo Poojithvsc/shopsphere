@@ -1,0 +1,11 @@
+# Prometheus scrape config for ShopSphere (Phase 18a).
+# Scrapes the app's Micrometer Prometheus endpoint. The app is reachable by its compose
+# service name `app` on the internal network; metrics_path points at the actuator endpoint.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: shopsphere
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["app:8080"]

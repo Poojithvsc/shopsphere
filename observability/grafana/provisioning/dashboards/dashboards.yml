@@ -1,0 +1,11 @@
+# Tells Grafana to load committed dashboard JSON from disk on startup (Phase 18a).
+apiVersion: 1
+
+providers:
+  - name: shopsphere
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
