@@ -16,6 +16,17 @@ docker push poojithvsc/shopsphere:latest
 
 - [ ] `poojithvsc/shopsphere:latest` is on Docker Hub.
 
+## 0b. Restarting in a *fresh* Whizlabs lab (if a prior lab expired mid-session)
+
+Each lab is a new AWS account, so the local Terraform state from a dead lab points at gone resources. Don't try to `destroy` the old one (its creds are expired) — just start clean:
+
+```powershell
+cd D:\shopsphere-project\code\terraform\ec2
+del terraform.tfstate, terraform.tfstate.backup   # ignore "not found"; orphaned resources are auto-reaped by the dead lab
+```
+
+`terraform.tfvars` is reusable as-is (only update `my_ip_cidr` if your public IP changed). Then continue from §1 with the new lab's creds.
+
 ## 1. Start the Whizlabs lab + credentials
 
 1. Launch the Whizlabs AWS sandbox; note the region (assume `us-east-1`).
@@ -34,6 +45,12 @@ copy terraform.tfvars.example terraform.tfvars
 #   db_password, jwt_secret (openssl rand -base64 48). Leave enable_https commented for now.
 ```
 
+> **Whizlabs lab constraints (discovered 2026-06-06 — already baked into `terraform.tfvars`):**
+> - `iam:CreateRole` is **denied** → `create_instance_profile = false` (the instance profile is an empty SSM placeholder; the box needs no AWS API access for the QA flow).
+> - `ec2:RunInstances` is **explicitly denied for any type except `t2.micro`** → `instance_class = "t2.micro"`.
+> - `sts:DecodeAuthorizationMessage` is denied too, so authz-failure messages can't be decoded — diagnose by hypothesis.
+> - The lab IAM user is long-lived (no `AWS_SESSION_TOKEN`); export only the access key + secret.
+
 ## 3. Phase 12 — apply (HTTP only)
 
 ```powershell
@@ -43,7 +60,14 @@ terraform apply        # type yes; ~5-8 min (RDS is the long pole)
 
 Capture outputs: `ec2_public_ip`, `rds_endpoint`, `app_http_url`.
 
-- [ ] **App is up:** open `http://<ec2_public_ip>:8080/swagger-ui.html` in a browser. (If it's not up after ~3 min, SSH in or check: the app waits on Kafka health; user-data logs are in `/var/log/cloud-init-output.log`.)
+- [ ] **App is up:** open `http://<ec2_public_ip>:8080/swagger-ui.html` in a browser. The app boots **slowly on t2.micro** (1 GiB, two JVMs + swap) — allow ~5–8 min after `apply` finishes before worrying.
+- [ ] **If it never answers**, the instance launched without SSH, so read the boot log via the console instead (no SSH/SSM needed):
+  ```powershell
+  aws ec2 get-console-output --instance-id <i-xxxx> --output text | Select-String -Pattern "swapon|docker|compose|Started|ERROR|Killed|OOM" -Context 0,2
+  ```
+  Look for the image pull, `docker compose up`, and any `Killed`/`OOM` (memory) or pull errors. The full boot log is also at `/var/log/cloud-init-output.log` if you do have SSH.
+
+Memory fixes already in place (so the above should not recur): a 2 GiB swapfile in user-data, `KAFKA_HEAP_OPTS=-Xmx384m` and app `JAVA_TOOL_OPTIONS=-Xmx384m` in `compose.cloud.yml`. If it still OOMs, try `instance_class = "t2.small"` (only if the lab policy allows it).
 - [ ] **RDS is private (the negative test):** from your laptop,
   ```powershell
   psql "host=<rds-host> port=5432 dbname=shopsphere user=shopsphere"   # must TIME OUT
@@ -103,8 +127,10 @@ Tell me the results and I'll:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| App never comes up on :8080 | t3.micro OOM (app + Kafka in 1 GiB) | `terraform apply -var instance_class=t3.small` |
+| App never comes up on :8080 | t2.micro OOM (app + Kafka in 1 GiB) | Mitigated: swap + heap caps are baked in. If still OOM, `instance_class = "t2.small"` (if lab allows). Confirm via `aws ec2 get-console-output`. |
 | `terraform apply` AccessDenied | Lab creds expired / wrong scope | Re-export lab creds; `aws sts get-caller-identity` |
+| `iam:CreateRole` denied | Whizlabs IAM user can't make roles | `create_instance_profile = false` (already set) |
+| `ec2:RunInstances` explicit deny | Whizlabs allows only `t2.micro` | `instance_class = "t2.micro"` (already set) |
 | `psql` from laptop *connects* (should time out) | RDS SG still public, or you applied `terraform/rds/` not `terraform/ec2/` | Confirm you're in `terraform/ec2/`; check `aws_security_group.rds` ingress is the EC2 SG |
 | HTTPS handshake fails | Caddy didn't get the public IP | Check `/opt/shopsphere/.env` has `PUBLIC_IP=`; `docker logs shopsphere-caddy` |
 | Image pull fails on EC2 | Docker Hub repo private / typo | Ensure `poojithvsc/shopsphere:latest` is public; check `docker compose logs` |
