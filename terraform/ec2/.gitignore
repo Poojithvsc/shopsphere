@@ -1,0 +1,6 @@
+# Never commit local Terraform state, provider binaries, or real tfvars.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+terraform.tfvars

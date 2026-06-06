@@ -1,0 +1,69 @@
+#!/bin/bash
+# ShopSphere EC2 bootstrap (Phase 12 + Phase 20). Rendered by Terraform `templatefile`: the
+# dollar-brace placeholders below are TERRAFORM template variables, not shell variables. This script
+# deliberately avoids shell variables with braces so it needs no escaping (bare $TOKEN/$PUBIP are
+# fine; templatefile only touches the brace form). Logs to /var/log/cloud-init-output.log.
+set -euxo pipefail
+
+# --- Swap: t2.micro has only 1 GiB RAM and runs two JVMs (app + Kafka). A 2 GiB swapfile absorbs
+# memory spikes on boot so the kernel does not OOM-kill the stack before the app binds :8080.
+# Cheap insurance on an ephemeral box. ---
+fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# --- Docker + compose plugin (Amazon Linux 2023) ---
+dnf install -y docker
+systemctl enable --now docker
+usermod -aG docker ec2-user
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# --- App working dir ---
+mkdir -p /opt/shopsphere
+cd /opt/shopsphere
+
+# --- Environment for docker compose interpolation (.env is read automatically) ---
+# These are real values substituted by Terraform at apply time; the app reads them via compose.
+cat > /opt/shopsphere/.env <<'ENVEOF'
+APP_IMAGE=${image}
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_USER=${db_user}
+DB_PASSWORD=${db_password}
+JWT_SECRET=${jwt_secret}
+AWS_REGION=${aws_region}
+ENVEOF
+
+# Discover this instance's public IP and append it so Caddy mints a cert with the IP in the SAN
+# (browsers send no SNI for bare-IP URLs, so the cert must carry the IP; an empty site address makes
+# Caddy serve a no-SAN fallback cert that fails the handshake). Done at runtime rather than templated
+# to avoid the launch-time chicken-and-egg with the public IP. Prefer the egress echo service (reliable
+# on a box that has a public IP); fall back to IMDSv2. `|| true` so set -e doesn't abort on a miss.
+PUBIP=$(curl -s --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]' || true)
+if [ -z "$PUBIP" ]; then
+  TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300" || true)
+  PUBIP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)
+fi
+echo "PUBLIC_IP=$PUBIP" >> /opt/shopsphere/.env
+chmod 600 /opt/shopsphere/.env
+
+# --- compose.cloud.yml (verbatim copy of the repo file, baked in so the box matches version control) ---
+cat > /opt/shopsphere/compose.cloud.yml <<'COMPOSEEOF'
+${compose_cloud}
+COMPOSEEOF
+
+# --- Caddyfile (used only when HTTPS is enabled) ---
+cat > /opt/shopsphere/Caddyfile <<'CADDYEOF'
+${caddyfile}
+CADDYEOF
+
+# --- Bring up the stack ---
+# When use_rds=false, also start the in-EC2 Postgres container (--profile localdb); the app reaches
+# it at DB_HOST=postgres. When true, the app uses the private RDS and no DB container runs.
+docker compose -f compose.cloud.yml %{ if !use_rds }--profile localdb %{ endif }%{ if enable_https }--profile caddy %{ endif }pull
+docker compose -f compose.cloud.yml %{ if !use_rds }--profile localdb %{ endif }%{ if enable_https }--profile caddy %{ endif }up -d
