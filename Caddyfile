@@ -12,9 +12,12 @@
 #
 # Expect a browser cert warning — that's the untrusted self-signed CA, acceptable for this iteration.
 # On graduation to own AWS, this proxy is replaced by ACM + ALB (a managed, trusted cert) — ADR-0020.
-
 {
 	auto_https disable_redirects
+	# Browsers send NO SNI for a bare-IP URL, so Caddy can't match the IP-keyed site and would serve
+	# an empty fallback cert (→ ERR_SSL_PROTOCOL_ERROR). default_sni makes Caddy assume the site's
+	# address when SNI is absent, so it presents the IP cert (with the IP in its SAN) to browsers.
+	default_sni {$CADDY_SITE_ADDRESS:localhost}
 }
 
 {$CADDY_SITE_ADDRESS:localhost} {
