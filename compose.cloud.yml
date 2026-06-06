@@ -13,6 +13,26 @@
 # Bring up with HTTPS (Phase 20): docker compose -f compose.cloud.yml --profile caddy up -d
 
 services:
+  # Fallback DB for sandboxes that deny RDS (use_rds=false → user-data adds `--profile localdb`).
+  # NOT the real Phase-12 design — the managed-private-RDS posture (ADR-0012) is unaffected: this
+  # service simply never starts when use_rds=true. App reaches it at DB_HOST=postgres (set by user-data).
+  postgres:
+    profiles: ["localdb"]
+    image: postgres:16
+    container_name: shopsphere-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-shopsphere}
+      POSTGRES_USER: ${DB_USER:-shopsphere}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-shopsphere} -d ${DB_NAME:-shopsphere}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: shopsphere-kafka
@@ -31,6 +51,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+      # cp-kafka defaults to -Xmx1G, which alone exhausts a 1 GiB t2.micro and OOM-kills the stack.
+      # Cap it so app + Kafka coexist on the lab box (with swap as the safety net). See ADR-0012.
+      KAFKA_HEAP_OPTS: "-Xmx384m -Xms256m"
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 >/dev/null 2>&1 || exit 1"]
       interval: 10s
@@ -54,6 +77,9 @@ services:
       # S3 dormant: blank endpoint → SDK uses real-S3 resolution; the core QA flow never calls it.
       S3_ENDPOINT: ""
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Cap the app heap so it shares the 1 GiB t2.micro with Kafka. JAVA_TOOL_OPTIONS is honoured by
+      # the JVM regardless of entrypoint. Lift/remove on a larger box.
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
     ports:
       # Direct HTTP (Phase 12). Caddy (Phase 20) also fronts this on 443.
       - "8080:8080"
@@ -82,3 +108,4 @@ services:
 
 volumes:
   caddy-data:
+  pgdata:

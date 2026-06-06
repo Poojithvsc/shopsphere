@@ -14,11 +14,11 @@ output "app_https_url" {
 }
 
 output "rds_endpoint" {
-  description = "host:port of the PRIVATE RDS. Reachable from the EC2 only — a psql from your laptop should time out (that is the Phase-12 acceptance check)."
-  value       = aws_db_instance.this.endpoint
+  description = "host:port of the PRIVATE RDS. Reachable from the EC2 only — a psql from your laptop should time out (that is the Phase-12 acceptance check). Empty when use_rds=false (Postgres runs as a container on the EC2)."
+  value       = var.use_rds ? aws_db_instance.this[0].endpoint : "(none — Postgres is a container on the EC2; use_rds=false)"
 }
 
 output "rds_host" {
   description = "RDS hostname only — what the EC2's compose.cloud.yml uses as DB_HOST."
-  value       = aws_db_instance.this.address
+  value       = var.use_rds ? aws_db_instance.this[0].address : "postgres (in-EC2 container)"
 }

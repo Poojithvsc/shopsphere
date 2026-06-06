@@ -30,6 +30,18 @@ variable "key_name" {
   default     = ""
 }
 
+variable "use_rds" {
+  description = "When true (the real Phase-12 design), provision a PRIVATE managed RDS and point the app at it. When false, skip all RDS resources and run Postgres as a container on the EC2 instead — a fallback for Whizlabs sandboxes that deny RDS (the SAA Cloud Sandbox denies even rds:Describe). The container path does NOT demonstrate the 'private managed DB / network-as-security-control' lesson of ADR-0012; that acceptance criterion is deferred to the guided RDS lab or own-AWS."
+  type        = bool
+  default     = true
+}
+
+variable "create_instance_profile" {
+  description = "Create an IAM role + instance profile for the EC2. Whizlabs IAM users often lack iam:CreateRole; set false to skip it. The lab QA flow needs no AWS API access from the box (public image pull, password DB auth, S3 dormant), so skipping is safe. Re-enable on own-AWS when SSM/Parameter Store land (ADR-0013)."
+  type        = bool
+  default     = true
+}
+
 variable "enable_https" {
   description = "Phase 20 toggle: when true, user-data also starts the Caddy container (HTTPS via tls internal on :443). Leave false for a Phase-12-only deploy."
   type        = bool

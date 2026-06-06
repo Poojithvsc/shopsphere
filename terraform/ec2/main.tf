@@ -102,6 +102,7 @@ resource "aws_security_group" "ec2" {
 # laptop /32. Proving this is an acceptance criterion: `psql -h <rds-endpoint>` from the laptop must
 # time out. See ADR-0012.
 resource "aws_security_group" "rds" {
+  count       = var.use_rds ? 1 : 0
   name        = "${var.name_prefix}-rds"
   description = "ShopSphere RDS - Postgres 5432 from the EC2 security group only"
   vpc_id      = data.aws_vpc.default.id
@@ -128,11 +129,13 @@ resource "aws_security_group" "rds" {
 # ---------------------------------------------------------------------------
 
 resource "aws_db_subnet_group" "this" {
+  count      = var.use_rds ? 1 : 0
   name       = "${var.name_prefix}-rds"
   subnet_ids = data.aws_subnets.default.ids
 }
 
 resource "aws_db_instance" "this" {
+  count          = var.use_rds ? 1 : 0
   identifier     = "${var.name_prefix}-postgres"
   engine         = "postgres"
   engine_version = var.engine_version
@@ -146,8 +149,8 @@ resource "aws_db_instance" "this" {
   password = var.db_password
   port     = 5432
 
-  db_subnet_group_name   = aws_db_subnet_group.this.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.this[0].name
+  vpc_security_group_ids = [aws_security_group.rds[0].id]
   publicly_accessible    = false # the Phase-12 flip — see ADR-0012
 
   # Throwaway-lab posture — see ADR-0011/0012.
@@ -162,7 +165,8 @@ resource "aws_db_instance" "this" {
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "ec2" {
-  name = "${var.name_prefix}-ec2"
+  count = var.create_instance_profile ? 1 : 0
+  name  = "${var.name_prefix}-ec2"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -175,8 +179,9 @@ resource "aws_iam_role" "ec2" {
 }
 
 resource "aws_iam_instance_profile" "ec2" {
-  name = "${var.name_prefix}-ec2"
-  role = aws_iam_role.ec2.name
+  count = var.create_instance_profile ? 1 : 0
+  name  = "${var.name_prefix}-ec2"
+  role  = aws_iam_role.ec2[0].name
 }
 
 # ---------------------------------------------------------------------------
@@ -188,14 +193,17 @@ resource "aws_instance" "app" {
   instance_type          = var.instance_class
   subnet_id              = data.aws_subnets.default.ids[0]
   vpc_security_group_ids = [aws_security_group.ec2.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2.name
-  key_name               = var.key_name != "" ? var.key_name : null
+  # Force a public IP — some sandbox default subnets have MapPublicIpOnLaunch=false, leaving the box
+  # unreachable. Explicit assignment makes the deploy subnet-independent.
+  associate_public_ip_address = true
+  iam_instance_profile        = var.create_instance_profile ? aws_iam_instance_profile.ec2[0].name : null
+  key_name                    = var.key_name != "" ? var.key_name : null
 
   # The compose file and Caddyfile are baked into user-data from the repo copies so the running EC2
   # matches what is committed (no drift between the lab box and version control).
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
     image         = var.app_image
-    db_host       = aws_db_instance.this.address
+    db_host       = var.use_rds ? aws_db_instance.this[0].address : "postgres"
     db_port       = "5432"
     db_name       = var.db_name
     db_user       = var.db_username
@@ -203,6 +211,7 @@ resource "aws_instance" "app" {
     jwt_secret    = var.jwt_secret
     aws_region    = var.aws_region
     enable_https  = var.enable_https
+    use_rds       = var.use_rds
     compose_cloud = file("${path.module}/../../compose.cloud.yml")
     caddyfile     = file("${path.module}/../../Caddyfile")
   })

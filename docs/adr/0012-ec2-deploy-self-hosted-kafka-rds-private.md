@@ -24,6 +24,14 @@ The image is built locally and pushed to a public Docker Hub repo (`poojithvsc/s
 
 Default VPC (no bespoke network), t3.micro, no backups, no final snapshot, `apply_immediately`. **XP YAGNI:** a 4-hour box does not warrant private subnets + NAT or a backup plan. This is correct *only* because the lab is ephemeral and holds no real data — the same honesty as ADR-0011. The IAM instance profile is minimal (no SSM yet); ADR-0013 already documents what own-AWS would add.
 
+## Fallback: Postgres as a container when RDS is unavailable (`use_rds=false`)
+
+Added live during the 2026-06-06 lab: the Whizlabs **Cloud Sandbox denies RDS entirely** (even `rds:Describe`), while the only RDS-capable lab (the guided "EC2+RDS Terraform" one) is 60-min and attempt-capped. So the module gained a `use_rds` toggle. When `false`, all RDS resources are skipped (`count = 0`) and a `postgres:16` container runs on the EC2 under a `localdb` compose profile; the app reaches it at `DB_HOST=postgres`.
+
+This is **not** the target architecture and it does **not** demonstrate this ADR's headline lesson — the *managed, private DB behind a network boundary*. A co-located container has no separate network to lock down; the "laptop psql must time out" acceptance check is meaningless against it. That check stays **deferred** to RDS-capable AWS (the guided lab after its attempt reset, or own-AWS), exactly as #58 records.
+
+Why keep it in the codebase rather than as a throwaway branch (decided with the books): it is a genuine **two-value seam**, not a dead toggle — `false` ran live, `true` is `terraform validate`-clean and is the own-AWS path. That mirrors the project's existing abstraction-behind-a-seam stance (cf. ADR-0015's payment stub). **XP YAGNI** is noted honestly: once own-AWS is the only target the container path is dead weight and may be removed; until then it earned its place by being the only way the deploy ran at all.
+
 ## Consequences
 
 `terraform apply` brings up the whole deploy; `terraform destroy` removes it. `mvn verify` is unaffected (this is infrastructure, no app code). Three honest limits, recorded so they don't surprise later:
